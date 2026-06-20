@@ -340,20 +340,46 @@ A2. Expose image_url di response produk   (file: app/schemas/product.py)
  C. HAL YANG TIDAK ADA DI DOKUMEN CAPSTONE (perlu keputusan/penambahan)
 ==============================================================================
 
-C1. Penyimpanan status HUMAN TAKEOVER
+C1. HUMAN TAKEOVER — disimpan di BACKEND   [DIPUTUSKAN: opsi (b)]
 ------------------------------------------------------------------------------
-   Tabel customers di C300 TIDAK punya field takeover. Fitur escalate_to_admin
-   perlu menandai "sesi ini sedang ditangani admin". Pilihan:
-     (a) Cukup lokal di chatbot (sudah aku lakukan: flag + expires_at 7 hari), ATAU
-     (b) Tambah di backend: customers.human_takeover_active (Boolean) +
-         takeover_expires_at (DateTime), plus endpoint (require_service_key):
-           POST /customers/{nomor_wa}/takeover
-           Request : { "active":true, "expires_at":"2026-06-28T10:00:00Z" }
-           Response: { "nomor_wa":"...", "human_takeover_active":true,
-                       "expires_at":"2026-06-28T10:00:00Z" }
-   Idealnya toggle takeover dikontrol Admin lewat Admin Site -> butuh endpoint
-   ini + tombol di UI. Sekarang aku reset manual via endpoint internal chatbot.
-   KEPUTUSAN DIBUTUHKAN: (a) atau (b)?
+ Dipakai chatbot: saat escalate_to_admin (mis. pesanan custom), chatbot menandai
+ sesi pelanggan supaya bot BERHENTI auto-reply; Admin bisa mematikan takeover
+ lewat Admin Site setelah selesai menangani.
+
+ File yang dibuat/diubah:
+   - app/models/customer.py            (tambah 2 kolom — lihat di bawah)
+   - app/schemas/customer.py           (tambah field di response + schema takeover)
+   - app/repositories/customer_repo.py (fungsi set_takeover / get_takeover)
+   - app/services/customer_service.py
+   - app/api/routes/customer.py        (2 endpoint takeover)
+   - (Admin Site, tugas Ainaya) tombol toggle takeover -> panggil endpoint admin
+
+ Tambahan kolom di tabel customers (selain field di B1):
+   human_takeover_active  Boolean   default False
+   takeover_expires_at    DateTime  nullable
+
+ Endpoint untuk CHATBOT (Depends(require_service_key)):
+   POST /customers/{nomor_wa}/takeover
+     Request : { "active":true, "expires_at":"2026-06-28T10:00:00Z" }
+               (expires_at null = tanpa kadaluarsa; chatbot kirim now+7 hari)
+     Response: { "nomor_wa":"628...", "human_takeover_active":true,
+                 "expires_at":"2026-06-28T10:00:00Z" }
+   GET /customers/{nomor_wa}/takeover
+     Response: { "nomor_wa":"628...", "human_takeover_active":true,
+                 "expires_at":"2026-06-28T10:00:00Z" }
+     (chatbot memanggil ini untuk cek status; expired -> anggap non-aktif)
+
+ Endpoint untuk ADMIN SITE (Depends(require_admin_or_owner), pakai JWT):
+   - Untuk mematikan/menyalakan takeover dari UI Admin. Boleh route terpisah
+     (mis. PATCH /customers/{id}/takeover) atau route yang sama tapi auth admin.
+     Yang penting: Admin bisa set active=false agar bot kembali otomatis.
+
+ Logika service: set kedua kolom; jika active=false -> expires_at = null.
+ Selesai jika: (1) chatbot POST takeover -> tersimpan; (2) GET mengembalikannya;
+   (3) Admin Site bisa mematikan; (4) saat aktif, chatbot stop auto-reply
+   (logika stop ada di sisi chatbot, sumber kebenaran status = backend).
+ Sisi chatbot: SUDAH menulis status takeover (kini ke mock, header service key)
+   & akan membaca dari GET di atas — tinggal swap saat endpoint jadi.
 
 C2. Cara ambil nomor WA admin secara DINAMIS
 ------------------------------------------------------------------------------
@@ -374,17 +400,35 @@ C3. Stok PRODUK JADI tidak ada di model data
    Kalau mau "cek stok saat checkout" (B2 langkah 2) beneran jalan, butuh (b)/(c).
    KEPUTUSAN DIBUTUHKAN.
 
-C4. Trigger status "READY" / "PAID" -> PUSH ke chatbot
+C4. PUSH status "READY" (& opsional "PAID") ke chatbot   [DIPUTUSKAN: PUSH]
 ------------------------------------------------------------------------------
-   Saat Admin/Staff ubah status pesanan jadi "Ready" (atau saat webhook Midtrans
-   menandai paid), chatbot harus PROAKTIF memberi tahu pelanggan (alur §10.13).
-   Idealnya backend kirim HTTP ke chatbot saat status berubah:
-     POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready
-     (Endpoint penerimanya SUDAH aku siapkan di chatbot.)
-   Implementasi paling mudah: di service yang meng-update order.status ke "ready",
-   tambahkan satu HTTP POST ke URL di atas (pakai httpx, fire-and-forget).
-   Kalau tidak mau push, alternatifnya chatbot polling get_order_status berkala
-   (lebih boros). KEPUTUSAN: push (disarankan) atau polling?
+ Dipakai chatbot: memberi tahu pelanggan secara PROAKTIF tanpa diminta (§10.13),
+ mis. "pesanan kamu sudah siap diambil".
+
+ Yang harus backend lakukan: setiap kali status berubah ke keadaan yang perlu
+ diberitahukan, kirim HTTP POST ke Chatbot Service. Endpoint PENERIMA-nya SUDAH
+ ada di chatbot — kamu TIDAK perlu membuatnya, cukup memanggilnya:
+
+   (1) WAJIB — saat order.status berubah jadi "ready" (dari Admin Site):
+       POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready
+       Body: kosong. (Status "ready" tidak bisa dideteksi chatbot tanpa diberi
+       tahu, makanya push ini wajib.)
+
+   (2) OPSIONAL — saat pembayaran PAID (di handler webhook Midtrans /payments/notify):
+       boleh ikut push agar konfirmasi instan, TAPI chatbot juga sudah mendeteksi
+       paid lewat polling GET /payments/{order_id}/status (B5b), jadi ini opsional.
+
+ Implementasi paling mudah (httpx, fire-and-forget) di service yang meng-update
+ order.status:
+       import httpx
+       try:
+           async with httpx.AsyncClient(timeout=5) as c:
+               await c.post(f"{settings.chatbot_url}/webhook/internal/orders/{order_id}/ready")
+       except Exception:
+           pass   # jangan gagalkan update status hanya karena notifikasi
+ Tambah env: CHATBOT_URL (mis. http://chatbot-service:8000).
+ Selesai jika: ubah status order jadi "ready" di Admin -> pelanggan otomatis
+   menerima WhatsApp "pesanan siap" (untuk delivery: berisi nama + alamat toko).
 
 C5. Arsitektur pembayaran: siapa yang panggil Midtrans?   [SUDAH DIPUTUSKAN]
 ------------------------------------------------------------------------------
@@ -429,8 +473,10 @@ C6. Bentuk baris tabel chatbot_conversations
    1) A1 (fix double-prefix) + A2 (image_url)         -> cepat, langsung kepakai
    2) 0.2 (service key) + B1 + B2 + B3 (customer/order/status) -> alur pemesanan
    3) B5 (payment + Midtrans — semua di backend)      -> checkout real
-   4) C1, C3, C4 (takeover, stok, push ready)         -> keputusan desain
-   5) C2, C6                                           -> nice-to-have
- Pertanyaan keputusan yang aku tunggu jawabannya: C1, C2, C3, C4, C6.
- (C5 sudah diputuskan: endpoint pembayaran + Midtrans dibuat di backend.)
+   4) C1 (takeover opsi b) + C4 (push ready)          -> SUDAH diputuskan, dibuat
+   5) C3 (stok) -> perlu keputusan ;  C2, C6 -> nice-to-have
+ SUDAH DIPUTUSKAN: C1 = opsi (b) simpan di backend ; C4 = PUSH ke chatbot ;
+                   C5 = endpoint pembayaran + Midtrans dibuat di backend.
+ Masih ditunggu jawabannya: C2 (admin number dinamis), C3 (stok produk jadi),
+                            C6 (bentuk baris chatbot_conversations).
 ==============================================================================

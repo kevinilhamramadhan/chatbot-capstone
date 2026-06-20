@@ -4,6 +4,7 @@ import logging
 
 from langchain_core.tools import tool
 
+from app.backend_client import mock_backend
 from app.conversation import store
 from app.conversation.context import get_turn_context
 from app.core.config import settings
@@ -21,8 +22,11 @@ async def escalate_to_admin(reason: str) -> str:
     """
     wa = get_turn_context().wa_number
 
-    # 1) Set local takeover flag (+expiry). Backend storage is MOCK.
+    # 1) Set takeover flag (+expiry). Decision C1(b): backend is source of truth.
+    # We keep a local copy for the fast per-message check and ALSO persist to the
+    # backend (MOCK until POST /customers/{wa}/takeover exists — easy swap then).
     expires = await store.activate_takeover(wa)
+    await mock_backend.set_takeover(wa, True, expires.isoformat())
 
     # 2) Notify the admin via WhatsApp (REAL, via wwebjs-api) if configured.
     if settings.admin_wa_number:

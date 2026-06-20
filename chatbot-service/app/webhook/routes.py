@@ -9,6 +9,7 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Request
 
+from app.backend_client import mock_backend
 from app.conversation import background
 from app.conversation.orchestrator import handle_message
 from app.conversation.store import deactivate_takeover
@@ -70,6 +71,7 @@ async def whatsapp_webhook(request: Request, bg: BackgroundTasks):
 async def deactivate(phone: str):
     """Manually end a human-takeover session (PROMPT §12 — temporary)."""
     await deactivate_takeover(phone)
+    await mock_backend.set_takeover(phone, False, None)  # keep backend in sync (MOCK)
     return {"status": "ok", "phone": phone, "human_takeover_active": False}
 
 

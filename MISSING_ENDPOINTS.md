@@ -97,13 +97,15 @@ bug, which the chatbot works around defensively (see "Routing note" at the end).
 
 ## 4. Human Takeover
 
-### set_takeover
-- Method/path diasumsikan: `POST /customers/{nomor_wa}/takeover`
-- Request body diasumsikan: `{ "active": bool, "expires_at": ISO-8601 | null }`
-- Alasan: menyimpan status human-takeover di tabel `customers`. Field penyimpanan
-  ini belum jelas ada — perlu dikonfirmasi.
-- Sementara: status disimpan lokal di chatbot (tabel `sessions`), reset manual lewat
-  `POST /webhook/internal/takeover/{phone}/deactivate`.
+### set_takeover  — DIPUTUSKAN: disimpan di backend (opsi b)
+- Tambah kolom di tabel `customers`: `human_takeover_active BOOLEAN default false`,
+  `takeover_expires_at TIMESTAMP null`.
+- `POST /customers/{nomor_wa}/takeover` (service key)
+  - body: `{ "active": bool, "expires_at": ISO-8601 | null }`
+- `GET /customers/{nomor_wa}/takeover` (service key) — chatbot cek status.
+- Endpoint admin (JWT) untuk mematikan takeover dari Admin Site.
+- Chatbot sudah menulis status ini (kini ke mock) + reset manual via
+  `POST /webhook/internal/takeover/{phone}/deactivate`; tinggal swap saat jadi.
 
 ### admin number lookup
 - Diharapkan: cara mengambil nomor WA admin secara dinamis dari backend.
