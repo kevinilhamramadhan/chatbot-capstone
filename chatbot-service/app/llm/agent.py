@@ -1,0 +1,91 @@
+"""LLM agent: RAG retrieval + scope guard + tool calling.
+
+Design note: tool outputs are returned to the user verbatim instead of being fed
+back to the LLM for a second pass. With a small model (qwen3:1.7b) this keeps
+real data (prices, order summaries) accurate and avoids hallucinated rephrasing.
+"""
+
+import logging
+import re
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+from app.core.config import settings
+from app.llm.client import get_llm
+from app.llm.prompt import SYSTEM_PROMPT
+from app.rag.store import retrieve
+from app.tools.registry import ALL_TOOLS, TOOLS_BY_NAME
+
+logger = logging.getLogger(__name__)
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
+
+OUT_OF_SCOPE_REPLY = (
+    f"Maaf, aku hanya bisa membantu seputar {settings.store_name} ya — menu, pemesanan, "
+    "pembayaran, pengiriman, dan info toko. Ada yang bisa kubantu soal itu? 😊"
+)
+
+
+def _clean(text: str | None) -> str:
+    if not text:
+        return ""
+    return _THINK_RE.sub("", text).strip()
+
+
+async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
+    # 1) Retrieval + scope guard (PROMPT §7).
+    retrieval = retrieve(user_text)
+    rag_context = retrieval.context_text() if retrieval.in_scope else None
+    logger.info(
+        "RAG best_sim=%.3f in_scope=%s", retrieval.best_similarity, retrieval.in_scope
+    )
+
+    system = SYSTEM_PROMPT
+    if rag_context:
+        system += (
+            "\n\nKONTEKS FAQ (jawab pertanyaan umum berdasarkan ini):\n" + rag_context
+        )
+
+    messages: list = [SystemMessage(content=system)]
+    for h in history:
+        messages.append(
+            HumanMessage(content=h["content"])
+            if h["role"] == "user"
+            else AIMessage(content=h["content"])
+        )
+    messages.append(HumanMessage(content=user_text))
+
+    llm = get_llm().bind_tools(ALL_TOOLS)
+
+    try:
+        ai: AIMessage = await llm.ainvoke(messages)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("LLM invocation failed: %s", exc)
+        return "Maaf, lagi ada gangguan di sistem kami. Coba beberapa saat lagi ya 🙏"
+
+    # 2) No tool call -> direct answer (FAQ / greeting / refusal).
+    if not getattr(ai, "tool_calls", None):
+        answer = _clean(ai.content)
+        # Hard scope guard: out-of-scope and the model didn't use any on-topic
+        # tool -> refuse rather than answer from general knowledge.
+        if not rag_context and not answer:
+            return OUT_OF_SCOPE_REPLY
+        return answer or OUT_OF_SCOPE_REPLY
+
+    # 3) Execute tools; their outputs are the user-facing reply.
+    outputs: list[str] = []
+    for tc in ai.tool_calls:
+        tool = TOOLS_BY_NAME.get(tc["name"])
+        if tool is None:
+            logger.warning("LLM requested unknown tool: %s", tc["name"])
+            continue
+        try:
+            result = await tool.ainvoke(tc["args"])
+            outputs.append(str(result))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Tool %s failed: %s", tc["name"], exc)
+            outputs.append("Maaf, ada kendala saat memproses permintaanmu. Coba lagi ya 🙏")
+
+    if not outputs:
+        return _clean(ai.content) or OUT_OF_SCOPE_REPLY
+    return "\n\n".join(outputs)

@@ -1,0 +1,23 @@
+# Versions verified end-to-end against real qwen3 via Ollama (see scripts/smoke_live.py).
+# ── Web service ──────────────────────────────────────────────────────────────
+fastapi==0.138.0
+uvicorn[standard]==0.49.0
+pydantic==2.13.4
+pydantic-settings==2.14.2
+httpx==0.28.1
+
+# ── Local DB (SQLite, async) ─────────────────────────────────────────────────
+SQLAlchemy==2.0.51
+aiosqlite==0.22.1
+
+# ── AI orchestration (no `langchain` umbrella needed — only these) ────────────
+langchain-core==1.4.8
+langchain-ollama==1.1.0
+langchain-text-splitters==1.1.2
+
+# ── Vector store ─────────────────────────────────────────────────────────────
+chromadb==1.5.9
+
+# ── Testing ──────────────────────────────────────────────────────────────────
+pytest==9.1.1
+pytest-asyncio==1.4.0

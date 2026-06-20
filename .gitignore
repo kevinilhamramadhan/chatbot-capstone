@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Env / secrets
+.env
+*.env
+!.env.example
+
+# Local data
+*.db
+*.sqlite3
+chroma_db/
+chatbot-service/chroma_db/
+chatbot-service/*.db
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Reference backend is a separate repo, keep it out of this one's history
+Backend-Cakery/
+
+# Capstone reference docs (contain personal data: names/NIM) — keep out of repo
+Dokumen capstone/
+
+# Local Claude Code settings
+.claude/

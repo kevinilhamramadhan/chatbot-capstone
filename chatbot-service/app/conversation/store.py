@@ -1,0 +1,166 @@
+"""Data-access helpers for the local SQLite store (sessions, logs, pending orders).
+
+Each function manages its own AsyncSession so tools and background tasks can call
+them freely without juggling a shared session.
+"""
+
+import json
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import select
+
+from app.conversation.states import State
+from app.core.config import settings
+from app.core.database import async_session_factory
+from app.models.conversation import ConversationLog
+from app.models.pending_order import PendingOrder
+from app.models.session import ChatSession
+
+ACTIVE_ORDER_STATUSES = ("pending", "paid", "ready")
+
+
+# ── Sessions ──────────────────────────────────────────────────────────────────
+async def get_or_create_session(wa_number: str) -> ChatSession:
+    async with async_session_factory() as db:
+        row = await db.scalar(select(ChatSession).where(ChatSession.wa_number == wa_number))
+        if row is None:
+            row = ChatSession(wa_number=wa_number, state=State.IDLE)
+            db.add(row)
+            await db.commit()
+            await db.refresh(row)
+        return row
+
+
+async def update_session(wa_number: str, **fields) -> None:
+    async with async_session_factory() as db:
+        row = await db.scalar(select(ChatSession).where(ChatSession.wa_number == wa_number))
+        if row is None:
+            row = ChatSession(wa_number=wa_number)
+            db.add(row)
+        for k, v in fields.items():
+            setattr(row, k, v)
+        await db.commit()
+
+
+async def get_cart(wa_number: str) -> list[dict]:
+    row = await get_or_create_session(wa_number)
+    return json.loads(row.cart_json or "[]")
+
+
+async def set_cart(wa_number: str, cart: list[dict]) -> None:
+    await update_session(wa_number, cart_json=json.dumps(cart, ensure_ascii=False))
+
+
+async def get_customer(wa_number: str) -> dict:
+    row = await get_or_create_session(wa_number)
+    return json.loads(row.customer_json or "{}")
+
+
+async def set_customer(wa_number: str, customer: dict) -> None:
+    await update_session(wa_number, customer_json=json.dumps(customer, ensure_ascii=False))
+
+
+async def set_state(wa_number: str, state: State | str) -> None:
+    await update_session(wa_number, state=str(state))
+
+
+# ── Human takeover ────────────────────────────────────────────────────────────
+async def activate_takeover(wa_number: str) -> datetime:
+    expires = datetime.now(timezone.utc) + timedelta(days=settings.takeover_expiry_days)
+    await update_session(
+        wa_number, human_takeover_active=True, takeover_expires_at=expires
+    )
+    return expires
+
+
+async def deactivate_takeover(wa_number: str) -> None:
+    await update_session(
+        wa_number, human_takeover_active=False, takeover_expires_at=None
+    )
+
+
+async def is_takeover_active(wa_number: str) -> bool:
+    row = await get_or_create_session(wa_number)
+    if not row.human_takeover_active:
+        return False
+    if row.takeover_expires_at is None:
+        return True
+    exp = row.takeover_expires_at
+    if exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) >= exp:
+        await deactivate_takeover(wa_number)
+        return False
+    return True
+
+
+# ── Conversation log ──────────────────────────────────────────────────────────
+async def log_message(
+    wa_number: str, direction: str, content: str, intent: str | None = None
+) -> None:
+    async with async_session_factory() as db:
+        db.add(
+            ConversationLog(
+                wa_number=wa_number, direction=direction, content=content, intent=intent
+            )
+        )
+        await db.commit()
+
+
+async def recent_history(wa_number: str, limit: int = 6) -> list[dict]:
+    """Return recent turns as chat messages (oldest first) for LLM context."""
+    async with async_session_factory() as db:
+        rows = (
+            await db.scalars(
+                select(ConversationLog)
+                .where(ConversationLog.wa_number == wa_number)
+                .order_by(ConversationLog.id.desc())
+                .limit(limit)
+            )
+        ).all()
+    rows = list(reversed(rows))
+    return [
+        {"role": "user" if r.direction == "in" else "assistant", "content": r.content}
+        for r in rows
+    ]
+
+
+# ── Pending orders ────────────────────────────────────────────────────────────
+async def get_active_pending(wa_number: str) -> PendingOrder | None:
+    async with async_session_factory() as db:
+        return await db.scalar(
+            select(PendingOrder)
+            .where(
+                PendingOrder.wa_number == wa_number,
+                PendingOrder.status.in_(ACTIVE_ORDER_STATUSES),
+            )
+            .order_by(PendingOrder.id.desc())
+        )
+
+
+async def create_pending_order(**fields) -> PendingOrder:
+    async with async_session_factory() as db:
+        row = PendingOrder(**fields)
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        return row
+
+
+async def update_pending_order(order_id: int, **fields) -> None:
+    async with async_session_factory() as db:
+        row = await db.get(PendingOrder, order_id)
+        if row is None:
+            return
+        for k, v in fields.items():
+            setattr(row, k, v)
+        await db.commit()
+
+
+async def list_orders_by_status(*statuses: str) -> list[PendingOrder]:
+    async with async_session_factory() as db:
+        return list(
+            await db.scalars(
+                select(PendingOrder).where(PendingOrder.status.in_(statuses))
+            )
+        )

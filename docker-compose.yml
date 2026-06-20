@@ -1,0 +1,56 @@
+# Toti Cakery Chatbot — full stack.
+#
+#   docker compose up --build
+#
+# Ollama runs on the HOST by default (OLLAMA_BASE_URL via host.docker.internal).
+# The real backend (Nicholas's FastAPI) also runs separately; point
+# BACKEND_BASE_URL at it. See .env.example / README.md.
+
+services:
+  chatbot-service:
+    build: ./chatbot-service
+    container_name: toti-chatbot
+    env_file: .env
+    environment:
+      # Defaults so containers talk to each other; .env can override.
+      WWEBJS_BASE_URL: http://wwebjs-api:3000
+      PAYMENT_GATEWAY_URL: http://payment-gateway:9000
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./chatbot-service/chroma_db:/app/chroma_db      # persistent vector store
+      - ./chatbot-service/toti_chatbot.db:/app/toti_chatbot.db
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - payment-gateway
+      - wwebjs-api
+    restart: unless-stopped
+
+  payment-gateway:
+    build: ./services/payment-gateway
+    container_name: toti-payment-mock
+    environment:
+      MOCK_EXPIRY_MINUTES: "30"
+      MOCK_AUTO_PAY_SECONDS: "0"   # 0 = use /debug/mark-paid manually
+    ports:
+      - "9000:9000"
+    restart: unless-stopped
+
+  wwebjs-api:
+    image: avoylenko/wwebjs-api:latest
+    container_name: toti-wwebjs
+    environment:
+      ENABLE_WEBHOOK: "true"
+      BASE_WEBHOOK_URL: http://chatbot-service:8000/webhook/whatsapp
+      API_KEY: ${WWEBJS_API_KEY:-change-me}
+      # We only need the `message` event; silence the rest to reduce noise.
+      DISABLED_CALLBACKS: "message_create|message_revoke_everyone|message_reaction|media|group_join|group_leave|call"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./whatsapp-gateway/sessions:/usr/src/app/sessions
+    restart: unless-stopped
+
+# Note: Chroma runs embedded inside chatbot-service (PersistentClient) writing to
+# the mounted ./chatbot-service/chroma_db volume — no separate container needed.

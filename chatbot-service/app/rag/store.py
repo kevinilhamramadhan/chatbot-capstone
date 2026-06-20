@@ -1,0 +1,75 @@
+"""ChromaDB persistent store + retrieval with an out-of-scope guard.
+
+The scope guard (PROMPT §7) is the important bit: if the best retrieval
+similarity is below RAG_SIMILARITY_THRESHOLD, retrieval is considered
+out-of-scope and the caller must refuse to answer from general LLM knowledge.
+"""
+
+import logging
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+from app.core.config import settings
+from app.rag.embeddings import get_embedding_function
+
+if TYPE_CHECKING:
+    import chromadb
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RetrievalResult:
+    documents: list[str]
+    metadatas: list[dict]
+    similarities: list[float]
+
+    @property
+    def best_similarity(self) -> float:
+        return max(self.similarities) if self.similarities else 0.0
+
+    @property
+    def in_scope(self) -> bool:
+        return self.best_similarity >= settings.rag_similarity_threshold
+
+    def context_text(self) -> str:
+        return "\n\n---\n\n".join(self.documents)
+
+
+_client = None
+
+
+def get_client():
+    global _client
+    if _client is None:
+        import chromadb  # lazy: heavy import
+
+        _client = chromadb.PersistentClient(path=settings.chroma_persist_dir)
+    return _client
+
+
+def get_collection():
+    return get_client().get_or_create_collection(
+        name=settings.chroma_collection,
+        embedding_function=get_embedding_function(),
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def retrieve(query: str, top_k: int | None = None) -> RetrievalResult:
+    top_k = top_k or settings.rag_top_k
+    collection = get_collection()
+    if collection.count() == 0:
+        logger.warning("Chroma collection is empty — run ingest.py first.")
+        return RetrievalResult([], [], [])
+
+    # Embed the query ourselves and pass query_embeddings so we don't depend on
+    # ChromaDB's internal query-embedding dispatch (which differs across versions).
+    query_vec = get_embedding_function().embed_one(query)
+    res = collection.query(query_embeddings=[query_vec], n_results=top_k)
+    docs = res.get("documents", [[]])[0]
+    metas = res.get("metadatas", [[]])[0]
+    distances = res.get("distances", [[]])[0]
+    # cosine distance -> similarity
+    sims = [1.0 - float(d) for d in distances]
+    return RetrievalResult(documents=docs, metadatas=metas, similarities=sims)

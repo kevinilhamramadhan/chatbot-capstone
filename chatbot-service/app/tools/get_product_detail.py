@@ -1,0 +1,33 @@
+"""Tool: get_product_detail — REAL. Returns text and queues a product photo."""
+
+from langchain_core.tools import tool
+
+from app.conversation.context import OutboundMedia, get_turn_context
+from app.tools.formatting import product_label, resolve_product, rupiah
+
+
+@tool
+async def get_product_detail(product: str) -> str:
+    """Ambil detail satu produk (deskripsi, harga) dan KIRIM fotonya ke pelanggan.
+
+    `product` bisa berupa nama kue atau id produk. Gunakan saat pelanggan
+    menanyakan detail/penjelasan satu produk tertentu.
+    """
+    p = await resolve_product(product)
+    if p is None:
+        return f"Maaf, aku tidak menemukan produk '{product}'. Coba cek menu dulu ya."
+
+    name = product_label(p)
+    desc = p.get("deskripsi") or "Belum ada deskripsi untuk produk ini."
+    harga = rupiah(p.get("harga_jual"))
+
+    # Queue the image to be sent via wwebjs-api (PROMPT §10.2).
+    image_url = p.get("image_url")
+    caption = f"{name} — {harga}"
+    if image_url:
+        get_turn_context().media.append(OutboundMedia(image_url=image_url, caption=caption))
+
+    return (
+        f"*{name}*\n{desc}\nHarga: {harga}\n\n"
+        "Mau pesan ini? Bilang aja jumlahnya ya 😊"
+    )
