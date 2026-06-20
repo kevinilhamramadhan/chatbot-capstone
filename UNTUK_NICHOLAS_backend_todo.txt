@@ -275,7 +275,10 @@ A2. Expose image_url di response produk   (file: app/schemas/product.py)
 
 ------------------------------------------------------------------------------
  B5. PAYMENT — create_payment / verify_payment (C300 TOTI-17 / TOTI-08)
-     Ini bagianmu (Midtrans ASLI). Di sisi chatbot 100% MOCK, tanpa API key.
+     >> SUDAH DIKONFIRMASI (Kevin): SEMUA endpoint pembayaran + integrasi Midtrans
+        ASLI dibuat di BACKEND INI (bukan repo terpisah, bukan di chatbot).
+        Di sisi chatbot 100% MOCK (tanpa API key) sampai endpoint ini jadi;
+        setelah jadi, chatbot tinggal mengarahkan PAYMENT_GATEWAY_URL ke backend.
 ------------------------------------------------------------------------------
  File yang dibuat/diubah:
    - app/models/payment.py          (baru: Payment)
@@ -383,12 +386,13 @@ C4. Trigger status "READY" / "PAID" -> PUSH ke chatbot
    Kalau tidak mau push, alternatifnya chatbot polling get_order_status berkala
    (lebih boros). KEPUTUSAN: push (disarankan) atau polling?
 
-C5. Arsitektur pembayaran: siapa yang panggil Midtrans?
+C5. Arsitektur pembayaran: siapa yang panggil Midtrans?   [SUDAH DIPUTUSKAN]
 ------------------------------------------------------------------------------
-   Dokumen menulis create_payment sebagai "tool chatbot", tapi tabel payments ada
-   di backend. Sudah aku rancang via endpoint backend (B5: chatbot -> POST
-   /payments -> backend -> Midtrans). Ini rekomendasiku (server key tidak
-   menyebar, invoice & payments tercatat satu tempat). Konfirmasi setuju ya.
+   KEPUTUSAN (dikonfirmasi Kevin): BACKEND yang membuat semua endpoint pembayaran
+   dan memanggil Midtrans asli. Alur: chatbot -> POST /payments (backend) ->
+   Midtrans. Webhook notifikasi Midtrans masuk ke backend (lihat B5c). Server key
+   Midtrans HANYA di backend, tidak pernah ke chatbot.
+   Implementasi ada di B5. Tidak ada yang perlu diputuskan lagi di sini.
 
 C6. Bentuk baris tabel chatbot_conversations
 ------------------------------------------------------------------------------
@@ -424,8 +428,9 @@ C6. Bentuk baris tabel chatbot_conversations
  RINGKAS PRIORITAS
    1) A1 (fix double-prefix) + A2 (image_url)         -> cepat, langsung kepakai
    2) 0.2 (service key) + B1 + B2 + B3 (customer/order/status) -> alur pemesanan
-   3) B5 + C5 (payment + Midtrans)                    -> checkout real
+   3) B5 (payment + Midtrans — semua di backend)      -> checkout real
    4) C1, C3, C4 (takeover, stok, push ready)         -> keputusan desain
    5) C2, C6                                           -> nice-to-have
- Pertanyaan keputusan yang aku tunggu jawabannya: C1, C2, C3, C4, C5, C6.
+ Pertanyaan keputusan yang aku tunggu jawabannya: C1, C2, C3, C4, C6.
+ (C5 sudah diputuskan: endpoint pembayaran + Midtrans dibuat di backend.)
 ==============================================================================
