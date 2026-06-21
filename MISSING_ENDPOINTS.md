@@ -23,17 +23,10 @@ bug, which the chatbot works around defensively (see "Routing note" at the end).
 - Response diasumsikan: `{ "customer_id": int, ...echo fields }`
 - Alasan: menyimpan/memperbarui data pelanggan dari hasil checkout chatbot.
 
-## 1b. Product image field (just needs exposing on the existing endpoint)
+## 1b. Product image field — DONE ✓
 
-- The data model (C300 Tabel 3.4, tabel `products`) **already defines
-  `image_url VARCHAR(255)`**, but the live `ProductOut` schema in
-  `Backend-Cakery/app/schemas/product.py` does **not** return it (fields: id,
-  nama_produk, deskripsi, kategori, hpp_total, harga_jual, markup_percentage,
-  is_active, created_at, updated_at).
-- Impact: `get_product_detail` cannot send a product photo (PROMPT §10.2). The
-  chatbot already degrades gracefully (text only) and will send photos
-  automatically once `image_url` is present on the response.
-- Needed (small): add `image_url: str | None` to `ProductOut` (the column exists).
+- `image_url` is now returned by `ProductOut`. `get_product_detail` will send the
+  product photo automatically (just make sure the column is actually populated).
 
 ## 1c. Finished-product stock (data-model gap to confirm)
 
@@ -120,17 +113,10 @@ bug, which the chatbot works around defensively (see "Routing note" at the end).
 
 ---
 
-## Routing note (double-prefix bug)
+## Routing note (double-prefix bug) — FIXED ✓
 
-`Backend-Cakery/app/main.py` meng-`include_router` setiap router dengan prefix yang
-**sama** dengan prefix bawaan router-nya, sehingga path menjadi ganda:
-
-| Endpoint dipakai chatbot | Path "bersih" (asumsi) | Path live saat ini (akibat bug) |
-|---|---|---|
-| List produk | `GET /products/` | `GET /products/products/` |
-| Detail produk | `GET /products/{id}` | `GET /products/products/{id}` |
-| List FAQ | `GET /faq` | `GET /faq/faq` |
-
-Chatbot mencoba path "bersih" dulu, lalu fallback ke path ganda, dan menyimpan mana
-yang berhasil (`app/backend_client/base.py`). Jadi begitu bug diperbaiki, chatbot
-tetap jalan tanpa perubahan. **Tetap disarankan memperbaiki bug ini di backend.**
+The backend removed the per-router prefixes, so paths are clean now:
+`GET /products/`, `GET /products/{id}`, `GET /faq`. The chatbot tries the clean
+path first (and still falls back to the doubled form just in case), so no chatbot
+change was needed. Service auth: the chatbot now sends `X-Service-Key` on backend
+calls (matches the backend's `require_service_key`).

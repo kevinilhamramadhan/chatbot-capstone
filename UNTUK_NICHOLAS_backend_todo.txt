@@ -32,25 +32,16 @@
      Pola per fitur: model -> repositories/<x>_repo.py -> services/<x>_service.py
      -> schemas/<x>.py -> api/routes/<x>.py -> daftarkan di app/main.py.
 
-0.2  [PENTING] AUTENTIKASI endpoint untuk CHATBOT berbeda dari endpoint Admin.
-     Pelanggan yang chat lewat WhatsApp TIDAK punya akun & TIDAK punya JWT.
-     Jadi endpoint yang dipanggil Chatbot Service (customers, orders,
-     order-status, payment) JANGAN pakai Depends(get_current_user_id).
-     Amankan dengan SERVICE KEY antar-service (Chatbot <-> Website, localhost):
-       - Tambah env: SERVICE_API_KEY=... (sama di backend & chatbot)
-       - Buat dependency baru, mis. di app/api/dependencies.py:
-
-           from fastapi import Header, HTTPException
-           from app.core.config import settings
-
-           async def require_service_key(x_service_key: str = Header(None)):
-               if x_service_key != settings.service_api_key:
-                   raise HTTPException(401, "invalid service key")
-
-       - Pakai di route chatbot: Depends(require_service_key)
-     Chatbot akan mengirim header  X-Service-Key: <SERVICE_API_KEY>  di tiap
-     request. (Kalau kalian mau pakai cara lain, bilang aja — yang penting
-     bukan JWT user.)
+0.2  AUTENTIKASI endpoint CHATBOT (service key)   [DEPENDENCY SUDAH DIBUAT ✓]
+     STATUS: kamu sudah menambahkan require_service_key (header X-Service-Key)
+     di app/api/dependencies.py + SERVICE_API_KEY di config/.env. 👍
+     Chatbot SUDAH mengirim header X-Service-Key di tiap panggilan ke backend
+     (env chatbot: BACKEND_SERVICE_API_KEY — samakan nilainya dengan
+     SERVICE_API_KEY di backend).
+     YANG MASIH PERLU: pasang Depends(require_service_key) di SETIAP endpoint
+     baru untuk chatbot (B1, B2, B3, B4, B5, C1) saat kamu membangunnya.
+     Catatan: pelanggan WhatsApp tidak punya JWT, jadi endpoint chatbot JANGAN
+     pakai Depends(get_current_user_id) — cukup service key.
 
 0.3  Endpoint Admin (ubah status order, lihat semua order, dsb) TETAP pakai JWT
      + RBAC (require_admin_or_owner / require_owner) seperti yang sudah ada.
@@ -60,8 +51,12 @@
  A. PERBAIKAN KODE DI REPO (yang sudah ada, cepat)
 ==============================================================================
 
-A1. [PENTING] Bug double-prefix routing   (file: app/main.py)
+A1. Bug double-prefix routing   [SELESAI ✓ — commit "Fix Duplicate Route"]
 ------------------------------------------------------------------------------
+   STATUS: sudah dibetulkan. Kamu menghapus prefix dari tiap router, jadi path
+   sekarang bersih: /products/, /faq, /stock/, dst. Chatbot sudah cocok. 👍
+   (Catatan: list stock-items sekarang di /stock/ — bukan urusan chatbot, FYI.)
+   --- detail lama (sudah tidak perlu dikerjakan) ---
    Masalah: tiap router SUDAH punya prefix sendiri, TAPI di main.py di-include
    lagi dengan prefix tambahan -> semua path jadi ganda:
 
@@ -94,16 +89,11 @@ A1. [PENTING] Bug double-prefix routing   (file: app/main.py)
    (Chatbot-ku sudah tahan banting: coba path bersih dulu, fallback ke ganda.
     Tapi tolong tetap dibetulkan biar /docs rapi & konsisten.)
 
-A2. Expose image_url di response produk   (file: app/schemas/product.py)
+A2. Expose image_url di response produk   [SELESAI ✓]
 ------------------------------------------------------------------------------
-   Kolom image_url SUDAH ADA di tabel & model (app/models/product.py), tapi
-   schema ProductOut belum mengembalikannya. Tambahkan satu baris di class
-   ProductOut:
-
-       image_url: Optional[str] = None
-
-   Selesai jika: GET /products/ menampilkan field image_url tiap item.
-   Efek: chatbot otomatis mulai kirim FOTO produk ke pelanggan (alur §10.2).
+   STATUS: sudah ditambahkan ke ProductOut (image_url: Optional[str]). Chatbot
+   kini otomatis kirim FOTO produk saat get_product_detail (alur §10.2). 👍
+   (Pastikan saja data image_url-nya benar-benar diisi di tabel products.)
 
 
 ==============================================================================
@@ -470,11 +460,12 @@ C6. Bentuk baris tabel chatbot_conversations
 
 ==============================================================================
  RINGKAS PRIORITAS
-   1) A1 (fix double-prefix) + A2 (image_url)         -> cepat, langsung kepakai
-   2) 0.2 (service key) + B1 + B2 + B3 (customer/order/status) -> alur pemesanan
-   3) B5 (payment + Midtrans — semua di backend)      -> checkout real
-   4) C1 (takeover opsi b) + C4 (push ready)          -> SUDAH diputuskan, dibuat
-   5) C3 (stok) -> perlu keputusan ;  C2, C6 -> nice-to-have
+   [SELESAI ✓] A1 (double-prefix), A2 (image_url), 0.2 (require_service_key)
+   1) B1 + B2 + B3 (customer/order/status) <= BERIKUTNYA -> alur pemesanan
+      (pasang Depends(require_service_key) di tiap endpoint chatbot)
+   2) B5 (payment + Midtrans — semua di backend)      -> checkout real
+   3) C1 (takeover opsi b) + C4 (push ready)          -> sudah diputuskan, dibuat
+   4) C3 (stok) -> perlu keputusan ;  C2, C6 -> nice-to-have
  SUDAH DIPUTUSKAN: C1 = opsi (b) simpan di backend ; C4 = PUSH ke chatbot ;
                    C5 = endpoint pembayaran + Midtrans dibuat di backend.
  Masih ditunggu jawabannya: C2 (admin number dinamis), C3 (stok produk jadi),

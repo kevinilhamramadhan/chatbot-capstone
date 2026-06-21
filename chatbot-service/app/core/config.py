@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     backend_base_url: str = "http://localhost:8001"
     backend_verify_paths_via_openapi: bool = True
     backend_request_timeout_seconds: float = 10.0
+    # Sent as X-Service-Key on every backend call. Must match the backend's
+    # SERVICE_API_KEY (require_service_key dependency). Harmless on public GETs.
+    backend_service_api_key: str = ""
 
     # ── Ollama (LLM + embeddings) ─────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"

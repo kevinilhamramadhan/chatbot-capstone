@@ -23,6 +23,12 @@ class BackendClient:
     def __init__(self) -> None:
         self._base = settings.backend_base_url.rstrip("/")
         self._timeout = settings.backend_request_timeout_seconds
+        # Service-to-service auth header (backend's require_service_key).
+        self._headers = (
+            {"X-Service-Key": settings.backend_service_api_key}
+            if settings.backend_service_api_key
+            else {}
+        )
         # Cache: candidate-tuple -> resolved working path.
         self._resolved: dict[tuple[str, ...], str] = {}
 
@@ -37,7 +43,7 @@ class BackendClient:
         if key in self._resolved:
             candidates = [self._resolved[key]]
 
-        async with httpx.AsyncClient(timeout=self._timeout) as client:
+        async with httpx.AsyncClient(timeout=self._timeout, headers=self._headers) as client:
             last_exc: Exception | None = None
             for path in candidates:
                 url = f"{self._base}{path}"
