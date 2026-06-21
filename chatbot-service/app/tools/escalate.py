@@ -28,17 +28,23 @@ async def escalate_to_admin(reason: str) -> str:
     expires = await store.activate_takeover(wa)
     await mock_backend.set_takeover(wa, True, expires.isoformat())
 
-    # 2) Notify the admin via WhatsApp (REAL, via wwebjs-api) if configured.
-    if settings.admin_wa_number:
+    # 2) Notify the admin(s) via WhatsApp (REAL, via wwebjs-api).
+    # Decision C2: which admin handles takeover is dynamic (Owner-configured via
+    # RBAC). We fetch the handler numbers from the backend (MOCK for now) and fall
+    # back to the ADMIN_WA_NUMBER env var until that endpoint exists.
+    numbers = await mock_backend.get_takeover_admin_numbers()
+    if not numbers and settings.admin_wa_number:
+        numbers = [settings.admin_wa_number]
+    if not numbers:
+        logger.warning("No admin number available (dynamic list empty & env unset).")
+    for number in numbers:
         try:
             await whatsapp_client.send_text(
-                settings.admin_wa_number,
+                number,
                 f"🔔 Permintaan butuh penanganan admin.\nDari: {wa}\nAlasan: {reason}",
             )
         except Exception as exc:  # noqa: BLE001 - notification best-effort
-            logger.error("Failed to notify admin %s: %s", settings.admin_wa_number, exc)
-    else:
-        logger.warning("ADMIN_WA_NUMBER not set — cannot notify admin.")
+            logger.error("Failed to notify admin %s: %s", number, exc)
 
     logger.info("Takeover active for %s until %s", wa, expires.isoformat())
     return (

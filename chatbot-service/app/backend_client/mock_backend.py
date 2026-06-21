@@ -81,3 +81,12 @@ async def set_takeover(wa_number: str, active: bool, expires_at: str | None) -> 
     # MOCK — endpoint backend belum tersedia (POST /customers/{wa}/takeover)
     logger.info("[MOCK] set_takeover(%s, active=%s)", wa_number, active)
     return {"nomor_wa": wa_number, "human_takeover_active": active, "expires_at": expires_at}
+
+
+async def get_takeover_admin_numbers() -> list[str]:
+    # MOCK — endpoint backend belum tersedia (GET /admin/takeover-handlers).
+    # Decision C2: numbers are dynamic, set by the Owner via RBAC in the Admin Site.
+    # Until that endpoint exists this returns empty so the caller falls back to the
+    # ADMIN_WA_NUMBER env var.
+    logger.info("[MOCK] get_takeover_admin_numbers -> [] (fallback to ADMIN_WA_NUMBER)")
+    return []

@@ -371,13 +371,38 @@ C1. HUMAN TAKEOVER — disimpan di BACKEND   [DIPUTUSKAN: opsi (b)]
  Sisi chatbot: SUDAH menulis status takeover (kini ke mock, header service key)
    & akan membaca dari GET di atas — tinggal swap saat endpoint jadi.
 
-C2. Cara ambil nomor WA admin secara DINAMIS
+C2. Nomor WA admin penanganan takeover — DINAMIS via RBAC   [DIPUTUSKAN: dinamis]
 ------------------------------------------------------------------------------
-   Sekarang chatbot pakai 1 nomor fix dari env (ADMIN_WA_NUMBER). Di dokumen ada
-   kolom users.nomor_wa_admin. Kalau mau dinamis/multi-admin, sediakan:
-     GET /admin/notification-numbers (require_service_key)
-       -> { "numbers":["628111...","628222..."] }
-   KEPUTUSAN: pakai env fix dulu (cukup untuk capstone) atau buat endpoint ini?
+ Keputusan: Owner menentukan (lewat Admin Site / RBAC) admin mana yang menangani
+ custom order & human takeover. Chatbot mengambil daftar nomor itu dari backend
+ (bukan env lagi).
+
+ File yang dibuat/diubah:
+   - app/models/user.py: tandai admin penanggung jawab takeover. Pilihan:
+       (i) tambah kolom boolean users.handles_takeover (default False), Owner
+           toggle per-admin lewat Admin Site; ATAU
+       (ii) pakai kolom users.nomor_wa_admin yang sudah ada + flag di atas.
+     (Kolom users.nomor_wa_admin sudah ada di skema untuk "autentikasi Tool
+      Calling"/notifikasi — pakai itu sebagai nomor WA tujuan.)
+   - app/api/routes/ (admin/user route): endpoint untuk chatbot + endpoint Owner.
+   - (Admin Site, Ainaya) UI Owner untuk meng-assign admin penangan takeover.
+
+ Endpoint untuk CHATBOT (Depends(require_service_key)):
+   GET /admin/takeover-handlers
+     Response: { "numbers": ["628111...", "628222..."] }
+     Isi: nomor_wa_admin dari user role admin/owner yang AKTIF dan ditandai
+          sebagai penangan takeover oleh Owner. Boleh >1 (broadcast).
+     Jika kosong -> chatbot fallback ke env ADMIN_WA_NUMBER.
+
+ Endpoint untuk ADMIN SITE (Depends(require_owner), JWT):
+   - Owner set/clear flag handles_takeover pada user admin tertentu (lewat UI).
+     (Bentuk route bebas, mis. PATCH /users/{id} { "handles_takeover": true }.)
+
+ Sisi chatbot: SUDAH memanggil GET /admin/takeover-handlers (kini mock -> []),
+   menotifikasi SEMUA nomor yang dikembalikan, dan fallback ke ADMIN_WA_NUMBER
+   bila kosong. Tinggal swap saat endpoint jadi.
+ Selesai jika: Owner assign admin X -> escalate_to_admin mengirim notifikasi WA
+   ke nomor admin X (dan admin lain yang ditandai), bukan ke env lagi.
 
 C3. KETERSEDIAAN PRODUK JADI — dihitung dari resep vs stok   [DIPUTUSKAN: opsi (b)]
 ------------------------------------------------------------------------------
@@ -476,11 +501,14 @@ C6. chatbot_conversations — pakai LOG LOKAL chatbot   [DIPUTUSKAN]
    1) B1 + B2 + B3 (customer/order/status) <= BERIKUTNYA -> alur pemesanan
       (pasang Depends(require_service_key) di tiap endpoint chatbot)
    2) B5 (payment + Midtrans — semua di backend)      -> checkout real
-   3) C1 (takeover opsi b) + C4 (push ready) + C3 (stok opsi b) -> dibuat bareng B
-   4) C2 (admin number dinamis) -> opsional / nice-to-have
- SUDAH DIPUTUSKAN: C1 = opsi (b) simpan di backend ; C3 = opsi (b) hitung dari
-                   resep vs stok ; C4 = PUSH ke chatbot ; C5 = pembayaran +
-                   Midtrans di backend ; C6 = log lokal chatbot (tanpa aksi backend).
- Masih ditunggu jawabannya: HANYA C2 (nomor admin: env fix cukup, atau endpoint
-                   dinamis?). Selain itu semua keputusan sudah final.
+   3) C1 (takeover opsi b) + C4 (push ready) + C3 (stok opsi b)
+      + C2 (admin handlers dinamis)  -> dibuat bareng B
+ SEMUA KEPUTUSAN SUDAH FINAL (tidak ada lagi yang perlu ditunggu):
+   C1 = (b) takeover disimpan di backend
+   C2 = nomor admin DINAMIS via RBAC (Owner assign penangan takeover)
+   C3 = (b) ketersediaan produk dihitung dari resep vs stok
+   C4 = PUSH status "ready" ke chatbot
+   C5 = endpoint pembayaran + Midtrans dibuat di backend
+   C6 = log percakapan lokal di chatbot (tanpa aksi backend)
+ Tinggal eksekusi: A1/A2/0.2 SELESAI ; berikutnya B1-B5 + C1-C4 (& C2).
 ==============================================================================

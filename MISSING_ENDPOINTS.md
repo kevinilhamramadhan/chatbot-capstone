@@ -101,9 +101,12 @@ bug, which the chatbot works around defensively (see "Routing note" at the end).
 - Chatbot sudah menulis status ini (kini ke mock) + reset manual via
   `POST /webhook/internal/takeover/{phone}/deactivate`; tinggal swap saat jadi.
 
-### admin number lookup
-- Diharapkan: cara mengambil nomor WA admin secara dinamis dari backend.
-- Sementara: pakai env `ADMIN_WA_NUMBER` (satu nomor fix).
+### admin number lookup — DECIDED: dynamic via RBAC (C2)
+- `GET /admin/takeover-handlers` (service key) -> `{ "numbers": [...] }`:
+  WA numbers of admin(s) the Owner assigned (via Admin Site / RBAC) to handle
+  custom orders + human takeover.
+- Chatbot already calls this (mock -> []), notifies all returned numbers, and
+  falls back to env `ADMIN_WA_NUMBER` when empty. Swap to real when built.
 
 ## 5. Owner reports (prioritas rendah)
 
