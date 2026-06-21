@@ -19,6 +19,8 @@ async def get_menu(kategori: str | None = None) -> str:
 
     lines = ["Berikut menu Toti Cakery:"]
     for p in items:
-        lines.append(f"• {product_label(p)} — {rupiah(p.get('harga_jual'))}")
+        # is_available is computed by the backend (recipe vs stock). Absent -> available.
+        status = "" if p.get("is_available", True) else "  (sedang tidak tersedia)"
+        lines.append(f"• {product_label(p)} — {rupiah(p.get('harga_jual'))}{status}")
     lines.append("\nMau lihat detail salah satu kue? Sebutkan namanya ya 😊")
     return "\n".join(lines)

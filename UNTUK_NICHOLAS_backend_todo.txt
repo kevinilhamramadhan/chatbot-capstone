@@ -379,16 +379,28 @@ C2. Cara ambil nomor WA admin secara DINAMIS
        -> { "numbers":["628111...","628222..."] }
    KEPUTUSAN: pakai env fix dulu (cukup untuk capstone) atau buat endpoint ini?
 
-C3. Stok PRODUK JADI tidak ada di model data
+C3. KETERSEDIAAN PRODUK JADI — dihitung dari resep vs stok   [DIPUTUSKAN: opsi (b)]
 ------------------------------------------------------------------------------
-   Tabel products tidak punya kolom stok/qty (stok hanya untuk bahan baku di
-   stock_items). Tapi get_menu "menampilkan ketersediaan stok" & create_payment
-   "cek stok semua item di cart". Pilihan:
-     (a) Ketersediaan = is_active saja (yang chatbot pakai sekarang), ATAU
-     (b) Hitung dari resep vs stock_items (bisa/tidaknya diproduksi), ATAU
-     (c) Tambah kolom products.stock_qty / products.is_available.
-   Kalau mau "cek stok saat checkout" (B2 langkah 2) beneran jalan, butuh (b)/(c).
-   KEPUTUSAN DIBUTUHKAN.
+ Keputusan: produk dianggap "tersedia" jika SEMUA bahan di resepnya (tabel
+ recipes) punya stok cukup di stock_items untuk membuat minimal 1 unit. TIDAK
+ menambah kolom stok di products (dihitung on-the-fly).
+
+ File yang diubah:
+   - app/services/product_service.py (atau recipe/stock service): fungsi
+     hitung is_available(product) -> cek tiap Recipe.qty_bahan <= stok tersedia
+     di StockItem. (Kalau produk tanpa resep, anggap tersedia / sesuai kebijakan.)
+   - app/schemas/product.py: tambah field computed di ProductOut:
+         is_available: bool = True
+   - GET /products  &  GET /products/{id}: isi is_available hasil perhitungan.
+   - B2 (create_order) langkah 2: pakai perhitungan yang sama; jika ada item tak
+     tersedia -> 400 { "detail":"product X out of stock" }.
+
+ Kontrak untuk chatbot:  ProductOut.is_available (bool). Chatbot SUDAH siap:
+   - get_menu: item is_available=false ditandai "(sedang tidak tersedia)".
+   - add_to_cart: item is_available=false ditolak.
+   (Jika field belum ada, chatbot menganggap semua tersedia — aman.)
+ Selesai jika: produk yang resepnya kekurangan bahan muncul is_available=false,
+   dan create_order menolak item tersebut (400).
 
 C4. PUSH status "READY" (& opsional "PAID") ke chatbot   [DIPUTUSKAN: PUSH]
 ------------------------------------------------------------------------------
@@ -428,12 +440,12 @@ C5. Arsitektur pembayaran: siapa yang panggil Midtrans?   [SUDAH DIPUTUSKAN]
    Midtrans HANYA di backend, tidak pernah ke chatbot.
    Implementasi ada di B5. Tidak ada yang perlu diputuskan lagi di sini.
 
-C6. Bentuk baris tabel chatbot_conversations
+C6. chatbot_conversations — pakai LOG LOKAL chatbot   [DIPUTUSKAN]
 ------------------------------------------------------------------------------
-   Skema dokumen = 1 baris per giliran (message + response jadi satu).
-   Log lokal chatbot = 1 baris per pesan (ada kolom direction in/out) supaya
-   notif proaktif & pesan saat takeover ikut tercatat. Saat integrasi tinggal
-   di-pair per giliran. Bukan blocker; konfirmasi bentuk final saja.
+   Keputusan: percakapan dicatat di DB LOKAL chatbot (1 baris per pesan, dengan
+   kolom direction in/out). TIDAK ADA aksi untuk Nicholas di sini — chatbot tidak
+   menulis ke tabel chatbot_conversations backend. Tabel itu boleh diabaikan
+   (atau dipakai nanti untuk analitik; chatbot bisa ekspor log lokalnya bila perlu).
 
 
 ==============================================================================
@@ -464,10 +476,11 @@ C6. Bentuk baris tabel chatbot_conversations
    1) B1 + B2 + B3 (customer/order/status) <= BERIKUTNYA -> alur pemesanan
       (pasang Depends(require_service_key) di tiap endpoint chatbot)
    2) B5 (payment + Midtrans — semua di backend)      -> checkout real
-   3) C1 (takeover opsi b) + C4 (push ready)          -> sudah diputuskan, dibuat
-   4) C3 (stok) -> perlu keputusan ;  C2, C6 -> nice-to-have
- SUDAH DIPUTUSKAN: C1 = opsi (b) simpan di backend ; C4 = PUSH ke chatbot ;
-                   C5 = endpoint pembayaran + Midtrans dibuat di backend.
- Masih ditunggu jawabannya: C2 (admin number dinamis), C3 (stok produk jadi),
-                            C6 (bentuk baris chatbot_conversations).
+   3) C1 (takeover opsi b) + C4 (push ready) + C3 (stok opsi b) -> dibuat bareng B
+   4) C2 (admin number dinamis) -> opsional / nice-to-have
+ SUDAH DIPUTUSKAN: C1 = opsi (b) simpan di backend ; C3 = opsi (b) hitung dari
+                   resep vs stok ; C4 = PUSH ke chatbot ; C5 = pembayaran +
+                   Midtrans di backend ; C6 = log lokal chatbot (tanpa aksi backend).
+ Masih ditunggu jawabannya: HANYA C2 (nomor admin: env fix cukup, atau endpoint
+                   dinamis?). Selain itu semua keputusan sudah final.
 ==============================================================================

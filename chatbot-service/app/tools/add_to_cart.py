@@ -46,7 +46,7 @@ async def add_to_cart(items: list[dict]) -> str:
         )
 
     cart = await store.get_cart(wa)
-    added, not_found = [], []
+    added, not_found, unavailable = [], [], []
     for raw in items:
         name_q = str(raw.get("product") or raw.get("nama") or "").strip()
         try:
@@ -58,6 +58,10 @@ async def add_to_cart(items: list[dict]) -> str:
         p = await resolve_product(name_q)
         if p is None:
             not_found.append(name_q)
+            continue
+        # Backend marks products out of stock via is_available (recipe vs stock).
+        if not p.get("is_available", True):
+            unavailable.append(product_label(p))
             continue
         harga = p.get("harga_jual")
         if harga is None:
@@ -81,6 +85,11 @@ async def add_to_cart(items: list[dict]) -> str:
     await store.set_cart(wa, cart)
 
     if not added:
+        if unavailable and not not_found:
+            return (
+                f"Maaf, {', '.join(unavailable)} sedang tidak tersedia. "
+                "Mau pesan menu yang lain?"
+            )
         nf = ", ".join(not_found) if not_found else "item yang diminta"
         return f"Maaf, aku tidak menemukan {nf} di menu. Coba cek menu dulu ya."
 
@@ -90,5 +99,7 @@ async def add_to_cart(items: list[dict]) -> str:
     msg = cart_summary(cart)
     if not_found:
         msg += f"\n\n(Tidak ditemukan: {', '.join(not_found)})"
+    if unavailable:
+        msg += f"\n\n(Sedang tidak tersedia: {', '.join(unavailable)})"
     msg += "\n\nSudah sesuai semua, atau mau nambah lagi? Ketik *sudah sesuai* untuk lanjut ya 😊"
     return msg

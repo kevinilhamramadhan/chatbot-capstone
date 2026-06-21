@@ -28,13 +28,14 @@ bug, which the chatbot works around defensively (see "Routing note" at the end).
 - `image_url` is now returned by `ProductOut`. `get_product_detail` will send the
   product photo automatically (just make sure the column is actually populated).
 
-## 1c. Finished-product stock (data-model gap to confirm)
+## 1c. Finished-product availability — DECIDED: compute from recipe vs stock
 
-- `get_menu` mentions "ketersediaan stok", but the `products` table has **no
-  stock/quantity column** — stock only exists for raw materials (`stock_items`).
-- For now `get_menu` reports availability via `is_active` only. Confirm whether
-  finished-product availability should be derived (recipe vs `stock_items`) or a
-  simple `is_available`/`stock_qty` column added to `products`.
+- Decision (opsi b): a product is "available" if every ingredient in its `recipes`
+  has enough quantity in `stock_items` to make ≥1 unit. No stock column added.
+- Backend: add a computed `is_available: bool` to `ProductOut` (GET /products and
+  /products/{id}), and reuse the same check in create_order (reject out-of-stock).
+- Chatbot already consumes `is_available`: `get_menu` marks unavailable items and
+  `add_to_cart` rejects them. (Missing field => treated as available.)
 
 ## 2. Orders
 

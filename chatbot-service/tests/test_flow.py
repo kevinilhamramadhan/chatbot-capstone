@@ -88,6 +88,29 @@ async def test_add_to_cart_unknown_product():
     assert await store.get_cart(WA) == []
 
 
+async def test_add_to_cart_rejects_unavailable(monkeypatch):
+    # Backend marks a product out of stock (C3 opsi b: is_available=False).
+    from app.backend_client import products as products_api
+    from app.tools.add_to_cart import add_to_cart
+
+    habis = {"id": 99, "nama_produk": "Kue Habis", "harga_jual": 40000,
+             "is_available": False, "is_active": True}
+
+    async def fake_list(only_active=True, kategori=None):
+        return [habis]
+
+    async def fake_get(pid):
+        return habis if pid == 99 else None
+
+    monkeypatch.setattr(products_api, "list_products", fake_list)
+    monkeypatch.setattr(products_api, "get_product", fake_get)
+
+    set_turn_context(TurnContext(wa_number=WA))
+    out = await add_to_cart.ainvoke({"items": [{"product": "Kue Habis", "qty": 1}]})
+    assert "tidak tersedia" in out.lower()
+    assert await store.get_cart(WA) == []
+
+
 # ── Full happy path: confirm -> identity -> DP -> payment ─────────────────────
 async def test_full_order_flow_with_dp():
     await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 2}])
