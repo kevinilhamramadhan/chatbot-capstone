@@ -1,105 +1,55 @@
 ==============================================================================
  TO-DO BACKEND UNTUK NICHOLAS — dari Kevin (Chatbot/AI)
 ==============================================================================
- Konteks: ini semua yang dibutuhkan Chatbot Service supaya bisa terhubung ke
- backend-mu (Backend-Cakery). Dokumen ini SUDAH LENGKAP & DETAIL: ada kontrak
- request/response, file mana yang dibuat/diubah, field model, logika service,
- dan kriteria "selesai" per endpoint. Mengikuti pola arsitektur repo-mu sekarang
- (model -> repository -> service -> route, RBAC, schema pydantic v2).
+ Ini SISA pekerjaan backend yang dibutuhkan Chatbot Service. Yang sudah selesai
+ sudah dihapus dari dokumen ini. Semua keputusan desain sudah final.
+ Dokumen lengkap: ada kontrak request/response, file yang dibuat/diubah, field
+ model, logika service, dan kriteria "selesai" per endpoint. Ikuti pola repo-mu
+ (model -> repository -> service -> schema -> route, RBAC, pydantic v2).
+
+ SUDAH SELESAI (tidak perlu diapa-apakan lagi):
+   - Bug double-prefix routing  -> path bersih /products/, /faq, dst.
+   - image_url di ProductOut    -> chatbot sudah bisa kirim foto produk.
+   - require_service_key (X-Service-Key) + SERVICE_API_KEY  -> tinggal DIPAKAI
+     di tiap endpoint baru di bawah.
 
  Daftar isi:
-   0. Cara kerja umum & catatan penting (BACA DULU)
-   A. Perbaikan kode yang SUDAH ADA di repo (cepat)
-   B. Endpoint BARU + langkah implementasi detail per endpoint
-   C. Hal yang TIDAK ADA di dokumen capstone (perlu keputusan)
-   D. Lampiran: ringkasan field tabel (referensi)
+   0. Cara kerja umum (BACA DULU)
+   B. Endpoint baru untuk chatbot (B1-B5)
+   C. Fitur yang sudah diputuskan, tinggal dibangun (C1-C4)
+   D. Lampiran: ringkasan field tabel
 
  Catatan format:
  - Uang = angka DECIMAL(10,2), tanpa pemisah ribuan. Contoh: 150000.00
  - Waktu = ISO-8601 UTC. Contoh: "2026-06-21T10:30:00Z"
- - Path tidak aku hardcode di chatbot; aku verifikasi lewat /docs. Yang penting
+ - Path tidak di-hardcode di chatbot; aku verifikasi lewat /docs. Yang penting
    nama path & bentuk JSON sesuai dokumen ini.
 
 
 ==============================================================================
- 0. CARA KERJA UMUM & CATATAN PENTING (BACA DULU)
+ 0. CARA KERJA UMUM (BACA DULU)
 ==============================================================================
 
-0.1  Menambah tabel baru di repo-mu = cukup 3 hal (tanpa Alembic):
+0.1  Menambah tabel baru = cukup 3 hal (tanpa Alembic):
      1) Buat file model di app/models/<nama>.py (gaya Column seperti product.py).
-     2) Daftarkan di app/models/__init__.py (import + tambahkan ke __all__).
+     2) Daftarkan di app/models/__init__.py (import + tambah ke __all__).
      3) Tabel otomatis dibuat saat startup (Base.metadata.create_all di lifespan).
      Pola per fitur: model -> repositories/<x>_repo.py -> services/<x>_service.py
      -> schemas/<x>.py -> api/routes/<x>.py -> daftarkan di app/main.py.
 
-0.2  AUTENTIKASI endpoint CHATBOT (service key)   [DEPENDENCY SUDAH DIBUAT ✓]
-     STATUS: kamu sudah menambahkan require_service_key (header X-Service-Key)
-     di app/api/dependencies.py + SERVICE_API_KEY di config/.env. 👍
-     Chatbot SUDAH mengirim header X-Service-Key di tiap panggilan ke backend
-     (env chatbot: BACKEND_SERVICE_API_KEY — samakan nilainya dengan
-     SERVICE_API_KEY di backend).
-     YANG MASIH PERLU: pasang Depends(require_service_key) di SETIAP endpoint
-     baru untuk chatbot (B1, B2, B3, B4, B5, C1) saat kamu membangunnya.
-     Catatan: pelanggan WhatsApp tidak punya JWT, jadi endpoint chatbot JANGAN
-     pakai Depends(get_current_user_id) — cukup service key.
-
-0.3  Endpoint Admin (ubah status order, lihat semua order, dsb) TETAP pakai JWT
-     + RBAC (require_admin_or_owner / require_owner) seperti yang sudah ada.
+0.2  AUTH endpoint chatbot = SERVICE KEY (sudah ada, tinggal dipakai):
+     - Pasang Depends(require_service_key) di SETIAP endpoint baru untuk chatbot
+       (B1-B5, C1, C2). Chatbot sudah mengirim header X-Service-Key otomatis.
+     - JANGAN pakai Depends(get_current_user_id) di endpoint chatbot — pelanggan
+       WhatsApp tidak punya JWT.
+     - Endpoint untuk ADMIN SITE (toggle takeover, assign admin, ubah status
+       order, dll) TETAP pakai JWT + RBAC (require_admin_or_owner/require_owner).
 
 
 ==============================================================================
- A. PERBAIKAN KODE DI REPO (yang sudah ada, cepat)
-==============================================================================
-
-A1. Bug double-prefix routing   [SELESAI ✓ — commit "Fix Duplicate Route"]
-------------------------------------------------------------------------------
-   STATUS: sudah dibetulkan. Kamu menghapus prefix dari tiap router, jadi path
-   sekarang bersih: /products/, /faq, /stock/, dst. Chatbot sudah cocok. 👍
-   (Catatan: list stock-items sekarang di /stock/ — bukan urusan chatbot, FYI.)
-   --- detail lama (sudah tidak perlu dikerjakan) ---
-   Masalah: tiap router SUDAH punya prefix sendiri, TAPI di main.py di-include
-   lagi dengan prefix tambahan -> semua path jadi ganda:
-
-     Router (prefix bawaan)          + main.py include  = path live SEKARANG
-     -----------------------------------------------------------------------
-     auth      /auth                 + /auth            = /auth/auth/...
-     faq       /faq                  + /faq             = /faq/faq
-     expense   /expenses             + /expenses        = /expenses/expenses
-     stock     /stock-items          + /stock           = /stock/stock-items
-     pricing   /pricing              + /pricing         = /pricing/pricing
-     product   /products             + /products        = /products/products
-     recipe    /products/{id}/recipes+ /recipes         = /recipes/products/{id}/recipes
-     purchasing/purchasing           + /purchases       = /purchases/purchasing
-
-   Perbaikan: di app/main.py, HAPUS argumen prefix= di semua include_router
-   (biarkan tags saja), karena tiap router sudah punya prefix sendiri:
-
-       app.include_router(auth.router,        tags=["Authentication"])
-       app.include_router(faq.router,         tags=["FAQ Management"])
-       app.include_router(expense.router,     tags=["Expenses"])
-       app.include_router(stock_router,       tags=["Stock Items"])
-       app.include_router(pricing_router,     tags=["Pricing"])
-       app.include_router(product_router,     tags=["Products"])
-       app.include_router(recipe_router,      tags=["Recipes"])
-       app.include_router(purchasing_router,  tags=["Purchasing"])
-
-   Hasil path bersih: /auth, /faq, /expenses, /stock-items, /pricing,
-   /products, /products/{id}/recipes, /purchasing.
-   Selesai jika: GET /products/ (bukan /products/products/) balas 200 di /docs.
-   (Chatbot-ku sudah tahan banting: coba path bersih dulu, fallback ke ganda.
-    Tapi tolong tetap dibetulkan biar /docs rapi & konsisten.)
-
-A2. Expose image_url di response produk   [SELESAI ✓]
-------------------------------------------------------------------------------
-   STATUS: sudah ditambahkan ke ProductOut (image_url: Optional[str]). Chatbot
-   kini otomatis kirim FOTO produk saat get_product_detail (alur §10.2). 👍
-   (Pastikan saja data image_url-nya benar-benar diisi di tabel products.)
-
-
-==============================================================================
- B. ENDPOINT BARU — LANGKAH IMPLEMENTASI DETAIL
- (semua ini sekarang aku MOCK di chatbot; begitu jadi, tinggal aku swap)
- Urutan kerjakan: B1 -> B2 -> B3 -> B4 -> B5.
+ B. ENDPOINT BARU UNTUK CHATBOT
+ (semua di-MOCK dulu di chatbot; begitu jadi tinggal aku swap)
+ Urutan disarankan: B1 -> B2 -> B3 -> B4 -> B5.
 ==============================================================================
 
 ------------------------------------------------------------------------------
@@ -109,15 +59,15 @@ A2. Expose image_url di response produk   [SELESAI ✓]
  pakai customer_id-nya untuk membuat order.
 
  File yang dibuat/diubah:
-   - app/models/customer.py        (baru)
-   - app/models/__init__.py        (daftarkan Customer)
-   - app/schemas/customer.py       (baru)
+   - app/models/customer.py            (baru)
+   - app/models/__init__.py            (daftarkan Customer)
+   - app/schemas/customer.py           (baru)
    - app/repositories/customer_repo.py (baru)
    - app/services/customer_service.py  (baru)
-   - app/api/routes/customer.py    (baru)  -> Depends(require_service_key)
-   - app/main.py                   (include_router customer)
+   - app/api/routes/customer.py        (baru) -> Depends(require_service_key)
+   - app/main.py                       (include_router customer)
 
- Model customers (sesuai C300 Tabel 3.7):
+ Model customers (C300 Tabel 3.7) — NB: dipakai juga oleh C1 (2 kolom tambahan):
    id            INT PK autoincrement
    nama          String(100)  not null
    nomor_wa      String(20)   unique, not null, index
@@ -136,10 +86,7 @@ A2. Expose image_url di response produk   [SELESAI ✓]
    POST /customers   (UPSERT by nomor_wa: kalau ada -> update, kalau belum -> buat)
      Request:
        { "nomor_wa":"628123456789", "nama":"Budi", "alamat":"Jl. Mawar 10, Batam" }
-     Response 200/201:
-       { "customer_id":1001, "nomor_wa":"628123456789", "nama":"Budi",
-         "alamat":"Jl. Mawar 10, Batam", "is_verified":false,
-         "created_at":"2026-06-21T10:00:00Z" }
+     Response 200/201: (sama seperti GET di atas)
 
  Logika service (POST): cari by nomor_wa; jika ada update nama/alamat; jika tidak
    insert baru; return customer.
@@ -207,7 +154,8 @@ A2. Expose image_url di response produk   [SELESAI ✓]
  Logika service (jalankan dalam 1 transaksi DB):
    1) Validasi: tiap product_id ada & is_active=True; kalau tidak -> 400
       { "detail":"product 8 not available" }.
-   2) (Opsional, lihat C3) cek stok; kalau tak cukup -> 400.
+   2) Cek ketersediaan (C3): hitung is_available dari resep vs stok; kalau ada
+      item tak tersedia -> 400 { "detail":"product X out of stock" }.
    3) Hitung subtotal = harga_jual * jumlah; hpp_snapshot = hpp_total saat ini.
       total = sum(subtotal).
    4) Insert orders (status="pending", created_via dari request).
@@ -225,7 +173,6 @@ A2. Expose image_url di response produk   [SELESAI ✓]
  B3. ORDER STATUS — get_order_status (C300 TOTI-18)
 ------------------------------------------------------------------------------
  Dipakai chatbot: pelanggan tanya "status pesanan saya".
-
  File: tambah fungsi di order_repo/order_service + route di api/routes/order.py.
 
  Endpoint:
@@ -265,10 +212,8 @@ A2. Expose image_url di response produk   [SELESAI ✓]
 
 ------------------------------------------------------------------------------
  B5. PAYMENT — create_payment / verify_payment (C300 TOTI-17 / TOTI-08)
-     >> SUDAH DIKONFIRMASI (Kevin): SEMUA endpoint pembayaran + integrasi Midtrans
-        ASLI dibuat di BACKEND INI (bukan repo terpisah, bukan di chatbot).
-        Di sisi chatbot 100% MOCK (tanpa API key) sampai endpoint ini jadi;
-        setelah jadi, chatbot tinggal mengarahkan PAYMENT_GATEWAY_URL ke backend.
+     SEMUA endpoint pembayaran + integrasi Midtrans ASLI dibuat di BACKEND INI
+     (bukan repo terpisah, bukan di chatbot). Chatbot 100% MOCK sampai ini jadi.
 ------------------------------------------------------------------------------
  File yang dibuat/diubah:
    - app/models/payment.py          (baru: Payment)
@@ -276,7 +221,7 @@ A2. Expose image_url di response produk   [SELESAI ✓]
    - app/schemas/payment.py         (baru)
    - app/services/payment_service.py(baru: panggil Midtrans + update invoice)
    - app/api/routes/payment.py      (baru):
-       * POST /payments               -> Depends(require_service_key) (dipanggil chatbot)
+       * POST /payments                  -> Depends(require_service_key)
        * GET  /payments/{order_id}/status -> Depends(require_service_key)
        * POST /payments/notify (webhook Midtrans) -> TANPA auth user, tapi WAJIB
          verifikasi signature_key Midtrans
@@ -320,31 +265,25 @@ A2. Expose image_url di response produk   [SELESAI ✓]
      - Saat paid: insert/update payments (payment_type DP/Final, jumlah_bayar,
        payment_method, payment_status=Success) lalu update invoices.status:
        "partial" jika baru DP, "paid" jika total terbayar lunas.
-     - Disarankan: setelah paid, PUSH ke chatbot biar pelanggan dinotifikasi
-       (lihat C4). Kalau tidak, chatbot tetap mendeteksi lewat polling B5b.
+     - Disarankan: setelah paid, PUSH ke chatbot (lihat C4) biar pelanggan
+       langsung dinotifikasi. Kalau tidak, chatbot tetap mendeteksi via B5b.
  Selesai jika: bayar DP -> invoice "partial"; pelunasan -> "paid"; signature
    webhook diverifikasi; chatbot bisa baca status "paid" di B5b.
 
 
 ==============================================================================
- C. HAL YANG TIDAK ADA DI DOKUMEN CAPSTONE (perlu keputusan/penambahan)
+ C. FITUR YANG SUDAH DIPUTUSKAN — TINGGAL DIBANGUN
+ (keputusan desain sudah final; ini juga kerjaan backend, dibuat bareng B)
 ==============================================================================
 
-C1. HUMAN TAKEOVER — disimpan di BACKEND   [DIPUTUSKAN: opsi (b)]
+------------------------------------------------------------------------------
+ C1. HUMAN TAKEOVER — disimpan di backend
 ------------------------------------------------------------------------------
  Dipakai chatbot: saat escalate_to_admin (mis. pesanan custom), chatbot menandai
- sesi pelanggan supaya bot BERHENTI auto-reply; Admin bisa mematikan takeover
- lewat Admin Site setelah selesai menangani.
+ sesi pelanggan supaya bot BERHENTI auto-reply; Admin mematikan takeover lewat
+ Admin Site setelah selesai menangani.
 
- File yang dibuat/diubah:
-   - app/models/customer.py            (tambah 2 kolom — lihat di bawah)
-   - app/schemas/customer.py           (tambah field di response + schema takeover)
-   - app/repositories/customer_repo.py (fungsi set_takeover / get_takeover)
-   - app/services/customer_service.py
-   - app/api/routes/customer.py        (2 endpoint takeover)
-   - (Admin Site, tugas Ainaya) tombol toggle takeover -> panggil endpoint admin
-
- Tambahan kolom di tabel customers (selain field di B1):
+ Tambahan kolom di tabel customers (selain field B1):
    human_takeover_active  Boolean   default False
    takeover_expires_at    DateTime  nullable
 
@@ -355,98 +294,78 @@ C1. HUMAN TAKEOVER — disimpan di BACKEND   [DIPUTUSKAN: opsi (b)]
      Response: { "nomor_wa":"628...", "human_takeover_active":true,
                  "expires_at":"2026-06-28T10:00:00Z" }
    GET /customers/{nomor_wa}/takeover
-     Response: { "nomor_wa":"628...", "human_takeover_active":true,
-                 "expires_at":"2026-06-28T10:00:00Z" }
-     (chatbot memanggil ini untuk cek status; expired -> anggap non-aktif)
+     Response: (sama) — chatbot cek status; expired -> anggap non-aktif.
 
- Endpoint untuk ADMIN SITE (Depends(require_admin_or_owner), pakai JWT):
-   - Untuk mematikan/menyalakan takeover dari UI Admin. Boleh route terpisah
-     (mis. PATCH /customers/{id}/takeover) atau route yang sama tapi auth admin.
-     Yang penting: Admin bisa set active=false agar bot kembali otomatis.
+ Endpoint untuk ADMIN SITE (Depends(require_admin_or_owner), JWT):
+   - Mematikan/menyalakan takeover dari UI Admin (mis. PATCH
+     /customers/{id}/takeover { "active": false }).
 
- Logika service: set kedua kolom; jika active=false -> expires_at = null.
- Selesai jika: (1) chatbot POST takeover -> tersimpan; (2) GET mengembalikannya;
-   (3) Admin Site bisa mematikan; (4) saat aktif, chatbot stop auto-reply
-   (logika stop ada di sisi chatbot, sumber kebenaran status = backend).
- Sisi chatbot: SUDAH menulis status takeover (kini ke mock, header service key)
-   & akan membaca dari GET di atas — tinggal swap saat endpoint jadi.
+ Logika: set kedua kolom; jika active=false -> expires_at = null.
+ Selesai jika: chatbot POST takeover -> tersimpan; GET mengembalikannya; Admin
+   Site bisa mematikan; saat aktif chatbot stop auto-reply (logika di chatbot,
+   sumber kebenaran status = backend).
+ Sisi chatbot: SUDAH menulis takeover (kini ke mock) & akan baca dari GET di
+   atas — tinggal swap saat endpoint jadi.
 
-C2. Nomor WA admin penanganan takeover — DINAMIS via RBAC   [DIPUTUSKAN: dinamis]
 ------------------------------------------------------------------------------
- Keputusan: Owner menentukan (lewat Admin Site / RBAC) admin mana yang menangani
- custom order & human takeover. Chatbot mengambil daftar nomor itu dari backend
- (bukan env lagi).
+ C2. NOMOR ADMIN PENANGAN TAKEOVER — dinamis via RBAC
+------------------------------------------------------------------------------
+ Owner menentukan (lewat Admin Site / RBAC) admin mana yang menangani custom
+ order & human takeover. Chatbot mengambil daftar nomor itu dari backend.
 
- File yang dibuat/diubah:
-   - app/models/user.py: tandai admin penanggung jawab takeover. Pilihan:
-       (i) tambah kolom boolean users.handles_takeover (default False), Owner
-           toggle per-admin lewat Admin Site; ATAU
-       (ii) pakai kolom users.nomor_wa_admin yang sudah ada + flag di atas.
-     (Kolom users.nomor_wa_admin sudah ada di skema untuk "autentikasi Tool
-      Calling"/notifikasi — pakai itu sebagai nomor WA tujuan.)
-   - app/api/routes/ (admin/user route): endpoint untuk chatbot + endpoint Owner.
-   - (Admin Site, Ainaya) UI Owner untuk meng-assign admin penangan takeover.
-
- Endpoint untuk CHATBOT (Depends(require_service_key)):
-   GET /admin/takeover-handlers
-     Response: { "numbers": ["628111...", "628222..."] }
-     Isi: nomor_wa_admin dari user role admin/owner yang AKTIF dan ditandai
-          sebagai penangan takeover oleh Owner. Boleh >1 (broadcast).
-     Jika kosong -> chatbot fallback ke env ADMIN_WA_NUMBER.
-
- Endpoint untuk ADMIN SITE (Depends(require_owner), JWT):
-   - Owner set/clear flag handles_takeover pada user admin tertentu (lewat UI).
-     (Bentuk route bebas, mis. PATCH /users/{id} { "handles_takeover": true }.)
+ Backend:
+   - Tandai admin penanggung jawab: tambah kolom users.handles_takeover (Boolean,
+     default False), Owner toggle per-admin. Nomor tujuan = users.nomor_wa_admin
+     (kolom ini sudah ada di skema).
+   - Endpoint untuk CHATBOT (Depends(require_service_key)):
+       GET /admin/takeover-handlers
+         Response: { "numbers": ["628111...", "628222..."] }
+         Isi: nomor_wa_admin dari user (role admin/owner) yang AKTIF & ditandai
+              handles_takeover. Boleh >1 (broadcast). Kosong -> chatbot fallback
+              ke env ADMIN_WA_NUMBER.
+   - Endpoint untuk ADMIN SITE (Depends(require_owner), JWT): Owner set/clear
+     handles_takeover (mis. PATCH /users/{id} { "handles_takeover": true }).
 
  Sisi chatbot: SUDAH memanggil GET /admin/takeover-handlers (kini mock -> []),
-   menotifikasi SEMUA nomor yang dikembalikan, dan fallback ke ADMIN_WA_NUMBER
-   bila kosong. Tinggal swap saat endpoint jadi.
- Selesai jika: Owner assign admin X -> escalate_to_admin mengirim notifikasi WA
-   ke nomor admin X (dan admin lain yang ditandai), bukan ke env lagi.
+   menotifikasi SEMUA nomor hasilnya, fallback ke ADMIN_WA_NUMBER bila kosong.
+ Selesai jika: Owner assign admin X -> escalate_to_admin kirim notif WA ke
+   nomor admin X (dan admin lain yang ditandai), bukan ke env lagi.
 
-C3. KETERSEDIAAN PRODUK JADI — dihitung dari resep vs stok   [DIPUTUSKAN: opsi (b)]
 ------------------------------------------------------------------------------
- Keputusan: produk dianggap "tersedia" jika SEMUA bahan di resepnya (tabel
- recipes) punya stok cukup di stock_items untuk membuat minimal 1 unit. TIDAK
- menambah kolom stok di products (dihitung on-the-fly).
+ C3. KETERSEDIAAN PRODUK JADI — dihitung dari resep vs stok
+------------------------------------------------------------------------------
+ Produk "tersedia" jika SEMUA bahan di resepnya (tabel recipes) punya stok cukup
+ di stock_items untuk membuat minimal 1 unit. TIDAK menambah kolom stok di
+ products (dihitung on-the-fly).
 
- File yang diubah:
+ Backend:
    - app/services/product_service.py (atau recipe/stock service): fungsi
-     hitung is_available(product) -> cek tiap Recipe.qty_bahan <= stok tersedia
-     di StockItem. (Kalau produk tanpa resep, anggap tersedia / sesuai kebijakan.)
+     is_available(product) -> cek tiap Recipe.qty_bahan <= stok tersedia di
+     StockItem. (Produk tanpa resep -> anggap tersedia / sesuai kebijakan.)
    - app/schemas/product.py: tambah field computed di ProductOut:
          is_available: bool = True
-   - GET /products  &  GET /products/{id}: isi is_available hasil perhitungan.
-   - B2 (create_order) langkah 2: pakai perhitungan yang sama; jika ada item tak
-     tersedia -> 400 { "detail":"product X out of stock" }.
+   - GET /products & GET /products/{id}: isi is_available hasil perhitungan.
+   - Dipakai juga di B2 langkah 2 (tolak item habis -> 400).
 
- Kontrak untuk chatbot:  ProductOut.is_available (bool). Chatbot SUDAH siap:
-   - get_menu: item is_available=false ditandai "(sedang tidak tersedia)".
-   - add_to_cart: item is_available=false ditolak.
-   (Jika field belum ada, chatbot menganggap semua tersedia — aman.)
- Selesai jika: produk yang resepnya kekurangan bahan muncul is_available=false,
-   dan create_order menolak item tersebut (400).
+ Sisi chatbot: SUDAH konsumsi ProductOut.is_available — get_menu menandai item
+   "(sedang tidak tersedia)", add_to_cart menolaknya. (Field absen -> dianggap
+   tersedia, aman.)
+ Selesai jika: produk yang resepnya kurang bahan -> is_available=false, dan
+   create_order menolaknya (400).
 
-C4. PUSH status "READY" (& opsional "PAID") ke chatbot   [DIPUTUSKAN: PUSH]
 ------------------------------------------------------------------------------
- Dipakai chatbot: memberi tahu pelanggan secara PROAKTIF tanpa diminta (§10.13),
- mis. "pesanan kamu sudah siap diambil".
-
- Yang harus backend lakukan: setiap kali status berubah ke keadaan yang perlu
- diberitahukan, kirim HTTP POST ke Chatbot Service. Endpoint PENERIMA-nya SUDAH
- ada di chatbot — kamu TIDAK perlu membuatnya, cukup memanggilnya:
+ C4. PUSH status "READY" (& opsional "PAID") ke chatbot
+------------------------------------------------------------------------------
+ Chatbot harus PROAKTIF memberi tahu pelanggan (§10.13), mis. "pesanan siap".
+ Endpoint PENERIMA-nya SUDAH ada di chatbot — kamu cukup MEMANGGILNYA:
 
    (1) WAJIB — saat order.status berubah jadi "ready" (dari Admin Site):
-       POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready
-       Body: kosong. (Status "ready" tidak bisa dideteksi chatbot tanpa diberi
-       tahu, makanya push ini wajib.)
+       POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready   (body kosong)
+       (Status "ready" tak bisa dideteksi chatbot tanpa diberi tahu -> wajib.)
+   (2) OPSIONAL — saat pembayaran PAID (di webhook Midtrans /payments/notify):
+       boleh ikut push; tapi chatbot juga sudah deteksi via polling B5b.
 
-   (2) OPSIONAL — saat pembayaran PAID (di handler webhook Midtrans /payments/notify):
-       boleh ikut push agar konfirmasi instan, TAPI chatbot juga sudah mendeteksi
-       paid lewat polling GET /payments/{order_id}/status (B5b), jadi ini opsional.
-
- Implementasi paling mudah (httpx, fire-and-forget) di service yang meng-update
- order.status:
+ Implementasi (httpx, fire-and-forget) di service yang meng-update order.status:
        import httpx
        try:
            async with httpx.AsyncClient(timeout=5) as c:
@@ -455,30 +374,16 @@ C4. PUSH status "READY" (& opsional "PAID") ke chatbot   [DIPUTUSKAN: PUSH]
            pass   # jangan gagalkan update status hanya karena notifikasi
  Tambah env: CHATBOT_URL (mis. http://chatbot-service:8000).
  Selesai jika: ubah status order jadi "ready" di Admin -> pelanggan otomatis
-   menerima WhatsApp "pesanan siap" (untuk delivery: berisi nama + alamat toko).
-
-C5. Arsitektur pembayaran: siapa yang panggil Midtrans?   [SUDAH DIPUTUSKAN]
-------------------------------------------------------------------------------
-   KEPUTUSAN (dikonfirmasi Kevin): BACKEND yang membuat semua endpoint pembayaran
-   dan memanggil Midtrans asli. Alur: chatbot -> POST /payments (backend) ->
-   Midtrans. Webhook notifikasi Midtrans masuk ke backend (lihat B5c). Server key
-   Midtrans HANYA di backend, tidak pernah ke chatbot.
-   Implementasi ada di B5. Tidak ada yang perlu diputuskan lagi di sini.
-
-C6. chatbot_conversations — pakai LOG LOKAL chatbot   [DIPUTUSKAN]
-------------------------------------------------------------------------------
-   Keputusan: percakapan dicatat di DB LOKAL chatbot (1 baris per pesan, dengan
-   kolom direction in/out). TIDAK ADA aksi untuk Nicholas di sini — chatbot tidak
-   menulis ke tabel chatbot_conversations backend. Tabel itu boleh diabaikan
-   (atau dipakai nanti untuk analitik; chatbot bisa ekspor log lokalnya bila perlu).
+   menerima WhatsApp "pesanan siap" (delivery: berisi nama + alamat toko).
 
 
 ==============================================================================
  D. LAMPIRAN — RINGKAS FIELD TABEL YANG DISENTUH CHATBOT (referensi C300)
 ==============================================================================
  products       : id, nama_produk, deskripsi, kategori, harga_jual, hpp_total,
-                  image_url(!), is_active, updated_at
+                  image_url, is_active, updated_at  (+ is_available computed, C3)
  customers      : id, nama, nomor_wa(unique), alamat, is_verified, created_at
+                  (+ human_takeover_active, takeover_expires_at  -> C1)
  orders         : id, customer_id(FK), handled_by(FK users,NULL),
                   status(ENUM,default pending), metode_pengiriman(ENUM
                   pickup/delivery), total_harga_pesanan, created_via(ENUM
@@ -491,24 +396,15 @@ C6. chatbot_conversations — pakai LOG LOKAL chatbot   [DIPUTUSKAN]
                   payment_method(QRIS/VA/Cash), verified_by(FK users,NULL),
                   payment_status(Success/Failed/Refunded),
                   payment_type(ENUM DP/Final), created_at
- chatbot_convos : id, customer_id(FK), session_id, message, response,
-                  intent(NULL), created_at
+ users          : (sudah ada) + handles_takeover Boolean, nomor_wa_admin  -> C2
 
 
 ==============================================================================
- RINGKAS PRIORITAS
-   [SELESAI ✓] A1 (double-prefix), A2 (image_url), 0.2 (require_service_key)
-   1) B1 + B2 + B3 (customer/order/status) <= BERIKUTNYA -> alur pemesanan
-      (pasang Depends(require_service_key) di tiap endpoint chatbot)
-   2) B5 (payment + Midtrans — semua di backend)      -> checkout real
-   3) C1 (takeover opsi b) + C4 (push ready) + C3 (stok opsi b)
-      + C2 (admin handlers dinamis)  -> dibuat bareng B
- SEMUA KEPUTUSAN SUDAH FINAL (tidak ada lagi yang perlu ditunggu):
-   C1 = (b) takeover disimpan di backend
-   C2 = nomor admin DINAMIS via RBAC (Owner assign penangan takeover)
-   C3 = (b) ketersediaan produk dihitung dari resep vs stok
-   C4 = PUSH status "ready" ke chatbot
-   C5 = endpoint pembayaran + Midtrans dibuat di backend
-   C6 = log percakapan lokal di chatbot (tanpa aksi backend)
- Tinggal eksekusi: A1/A2/0.2 SELESAI ; berikutnya B1-B5 + C1-C4 (& C2).
+ RINGKAS URUTAN KERJA
+   1) B1 + B2 + B3   (customers, create order, order status)  <= MULAI DI SINI
+   2) B4 (cancel) + C3 (is_available, dipakai B2)
+   3) B5 (payment + Midtrans)
+   4) C1 (takeover) + C2 (admin handlers) + C4 (push ready)
+ Jangan lupa: Depends(require_service_key) di tiap endpoint chatbot di atas.
+ Tidak ada lagi keputusan yang ditunggu — semua sudah final.
 ==============================================================================
