@@ -5,6 +5,7 @@ back to the LLM for a second pass. With a small model (qwen3:1.7b) this keeps
 real data (prices, order summaries) accurate and avoids hallucinated rephrasing.
 """
 
+import json
 import logging
 import re
 
@@ -30,6 +31,62 @@ def _clean(text: str | None) -> str:
     if not text:
         return ""
     return _THINK_RE.sub("", text).strip()
+
+
+def _balanced_json_objects(text: str) -> list[str]:
+    """Return top-level {...} substrings (handles nested braces)."""
+    objs, depth, start = [], 0, None
+    for i, ch in enumerate(text):
+        if ch == "{":
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == "}" and depth > 0:
+            depth -= 1
+            if depth == 0 and start is not None:
+                objs.append(text[start : i + 1])
+                start = None
+    return objs
+
+
+def _extract_text_tool_calls(content: str) -> list[dict]:
+    """Fallback: with thinking OFF, qwen3 sometimes emits a tool call as plain
+    JSON text (e.g. {"name": "get_menu", "arguments": {...}}) instead of a
+    structured tool call. Recover those so they still execute.
+    """
+    calls: list[dict] = []
+    for blob in _balanced_json_objects(content):
+        try:
+            d = json.loads(blob)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        if not isinstance(d, dict):
+            continue
+        name = d.get("name")
+        args = d.get("arguments", d.get("parameters", {}))
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except (json.JSONDecodeError, ValueError):
+                args = {}
+        if name in TOOLS_BY_NAME:
+            calls.append({"name": name, "args": args if isinstance(args, dict) else {}})
+    return calls
+
+
+async def _run_tool_calls(calls: list[dict]) -> list[str]:
+    outputs: list[str] = []
+    for tc in calls:
+        tool = TOOLS_BY_NAME.get(tc["name"])
+        if tool is None:
+            logger.warning("Requested unknown tool: %s", tc["name"])
+            continue
+        try:
+            outputs.append(str(await tool.ainvoke(tc.get("args", {}))))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Tool %s failed: %s", tc["name"], exc)
+            outputs.append("Maaf, ada kendala saat memproses permintaanmu. Coba lagi ya 🙏")
+    return outputs
 
 
 async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
@@ -63,29 +120,25 @@ async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
         logger.exception("LLM invocation failed: %s", exc)
         return "Maaf, lagi ada gangguan di sistem kami. Coba beberapa saat lagi ya 🙏"
 
-    # 2) No tool call -> direct answer (FAQ / greeting / refusal).
-    if not getattr(ai, "tool_calls", None):
+    # 2) Collect tool calls — structured first, then text-JSON fallback (needed
+    #    when qwen3 thinking is OFF and it emits the call as plain text).
+    calls = [
+        {"name": tc["name"], "args": tc.get("args", {})}
+        for tc in (getattr(ai, "tool_calls", None) or [])
+    ]
+    if not calls:
+        calls = _extract_text_tool_calls(_clean(ai.content))
+
+    # 3) No tool call -> direct answer (FAQ / greeting / refusal).
+    if not calls:
         answer = _clean(ai.content)
-        # Hard scope guard: out-of-scope and the model didn't use any on-topic
-        # tool -> refuse rather than answer from general knowledge.
+        # Hard scope guard: out-of-scope and no on-topic tool used -> refuse.
         if not rag_context and not answer:
             return OUT_OF_SCOPE_REPLY
         return answer or OUT_OF_SCOPE_REPLY
 
-    # 3) Execute tools; their outputs are the user-facing reply.
-    outputs: list[str] = []
-    for tc in ai.tool_calls:
-        tool = TOOLS_BY_NAME.get(tc["name"])
-        if tool is None:
-            logger.warning("LLM requested unknown tool: %s", tc["name"])
-            continue
-        try:
-            result = await tool.ainvoke(tc["args"])
-            outputs.append(str(result))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Tool %s failed: %s", tc["name"], exc)
-            outputs.append("Maaf, ada kendala saat memproses permintaanmu. Coba lagi ya 🙏")
-
+    # 4) Execute tools; their outputs are the user-facing reply.
+    outputs = await _run_tool_calls(calls)
     if not outputs:
         return _clean(ai.content) or OUT_OF_SCOPE_REPLY
     return "\n\n".join(outputs)

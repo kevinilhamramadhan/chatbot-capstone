@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.7
     llm_top_p: float = 0.8
     llm_num_ctx: int = 32768
+    # qwen3 "thinking" mode. Off by default: faster replies, no reasoning tokens,
+    # and more consistent tool-call formatting for a small model.
+    llm_reasoning: bool = False
 
     # ── RAG / ChromaDB ────────────────────────────────────────────────────────
     chroma_persist_dir: str = "./chroma_db"
