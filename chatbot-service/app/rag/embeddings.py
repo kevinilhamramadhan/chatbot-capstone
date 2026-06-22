@@ -19,6 +19,7 @@ class OllamaEmbeddingFunction:
         self._emb = OllamaEmbeddings(
             base_url=settings.ollama_base_url,
             model=settings.embedding_model,
+            keep_alive=settings.llm_keep_alive,  # keep resident alongside the LLM
         )
 
     def __call__(self, input) -> list[list[float]]:  # noqa: A002

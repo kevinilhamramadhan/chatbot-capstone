@@ -97,20 +97,24 @@ async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
         "RAG best_sim=%.3f in_scope=%s", retrieval.best_similarity, retrieval.in_scope
     )
 
-    system = SYSTEM_PROMPT
-    if rag_context:
-        system += (
-            "\n\nKONTEKS FAQ (jawab pertanyaan umum berdasarkan ini):\n" + rag_context
-        )
-
-    messages: list = [SystemMessage(content=system)]
+    # Keep the system message CONSTANT (system prompt + tool schemas) so Ollama
+    # can reuse its cached prefix across turns — on CPU this turns a ~35s prefill
+    # into ~5s. Variable RAG context goes into the user turn, not the system msg.
+    messages: list = [SystemMessage(content=SYSTEM_PROMPT)]
     for h in history:
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
             else AIMessage(content=h["content"])
         )
-    messages.append(HumanMessage(content=user_text))
+    if rag_context:
+        user_content = (
+            "Konteks FAQ (gunakan untuk menjawab kalau relevan):\n"
+            f"{rag_context}\n\n---\nPesan pelanggan: {user_text}"
+        )
+    else:
+        user_content = user_text
+    messages.append(HumanMessage(content=user_content))
 
     llm = get_llm().bind_tools(ALL_TOOLS)
 

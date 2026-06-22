@@ -19,4 +19,5 @@ def get_llm():
         top_p=settings.llm_top_p,
         num_ctx=settings.llm_num_ctx,
         reasoning=settings.llm_reasoning,  # False => qwen3 thinking mode OFF
+        keep_alive=settings.llm_keep_alive,  # keep resident -> no cold-start reloads
     )
