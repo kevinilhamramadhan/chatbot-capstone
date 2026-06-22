@@ -1,410 +1,212 @@
 ==============================================================================
  TO-DO BACKEND UNTUK NICHOLAS — dari Kevin (Chatbot/AI)
 ==============================================================================
- Ini SISA pekerjaan backend yang dibutuhkan Chatbot Service. Yang sudah selesai
- sudah dihapus dari dokumen ini. Semua keputusan desain sudah final.
- Dokumen lengkap: ada kontrak request/response, file yang dibuat/diubah, field
- model, logika service, dan kriteria "selesai" per endpoint. Ikuti pola repo-mu
- (model -> repository -> service -> schema -> route, RBAC, pydantic v2).
+ Ini SISA pekerjaan backend yang dibutuhkan Chatbot Service. Instruksi dibuat
+ EKSAK: satu cara per item, tanpa "opsional/atau/pilihan". Ikuti persis.
+ Semua endpoint chatbot WAJIB pakai Depends(require_service_key) (sudah ada).
 
- SUDAH SELESAI (tidak perlu diapa-apakan lagi):
-   - Bug double-prefix routing  -> path bersih /products/, /faq, dst.
-   - image_url di ProductOut    -> chatbot sudah bisa kirim foto produk.
-   - require_service_key (X-Service-Key) + SERVICE_API_KEY  -> tinggal DIPAKAI
-     di tiap endpoint baru di bawah.
+ STATUS SAAT INI
+ ---------------
+ SUDAH DIBUAT (terverifikasi jalan, tidak perlu diapa-apakan lagi):
+   - Fix double-prefix routing  -> path bersih /products/, /faq, /customers, /orders
+   - image_url di ProductOut
+   - require_service_key (X-Service-Key) + SERVICE_API_KEY
+   - B1: Customers (GET /customers, POST /customers)
+   - B2: Orders create (POST /orders)
+   - C1: Human takeover (POST & GET /customers/{nomor_wa}/takeover)
 
- Daftar isi:
-   0. Cara kerja umum (BACA DULU)
-   B. Endpoint baru untuk chatbot (B1-B5)
-   C. Fitur yang sudah diputuskan, tinggal dibangun (C1-C4)
-   D. Lampiran: ringkasan field tabel
+ HARUS DIBUAT (urut dari atas):
+   - B3: GET status pesanan
+   - B4: Cancel order
+   - C3: Field is_available pada produk (dipakai B-flow)
+   - B5: Payment + Midtrans
+   - C2: Endpoint daftar nomor admin penanganan takeover
+   - C4: Push status "ready" ke chatbot
 
- Catatan format:
- - Uang = angka DECIMAL(10,2), tanpa pemisah ribuan. Contoh: 150000.00
- - Waktu = ISO-8601 UTC. Contoh: "2026-06-21T10:30:00Z"
- - Path tidak di-hardcode di chatbot; aku verifikasi lewat /docs. Yang penting
-   nama path & bentuk JSON sesuai dokumen ini.
-
-
-==============================================================================
- 0. CARA KERJA UMUM (BACA DULU)
-==============================================================================
-
-0.1  Menambah tabel baru = cukup 3 hal (tanpa Alembic):
-     1) Buat file model di app/models/<nama>.py (gaya Column seperti product.py).
-     2) Daftarkan di app/models/__init__.py (import + tambah ke __all__).
-     3) Tabel otomatis dibuat saat startup (Base.metadata.create_all di lifespan).
-     Pola per fitur: model -> repositories/<x>_repo.py -> services/<x>_service.py
-     -> schemas/<x>.py -> api/routes/<x>.py -> daftarkan di app/main.py.
-
-0.2  AUTH endpoint chatbot = SERVICE KEY (sudah ada, tinggal dipakai):
-     - Pasang Depends(require_service_key) di SETIAP endpoint baru untuk chatbot
-       (B1-B5, C1, C2). Chatbot sudah mengirim header X-Service-Key otomatis.
-     - JANGAN pakai Depends(get_current_user_id) di endpoint chatbot — pelanggan
-       WhatsApp tidak punya JWT.
-     - Endpoint untuk ADMIN SITE (toggle takeover, assign admin, ubah status
-       order, dll) TETAP pakai JWT + RBAC (require_admin_or_owner/require_owner).
+ Format data (WAJIB):
+   - Uang = angka DECIMAL(10,2), tanpa pemisah ribuan. Contoh: 150000.00
+   - Waktu = ISO-8601 UTC. Contoh: "2026-06-21T10:30:00Z"
 
 
 ==============================================================================
- B. ENDPOINT BARU UNTUK CHATBOT
- (semua di-MOCK dulu di chatbot; begitu jadi tinggal aku swap)
- Urutan disarankan: B1 -> B2 -> B3 -> B4 -> B5.
+ 0. CARA KERJA (sama seperti modul yang sudah kamu buat)
 ==============================================================================
+ Pola per fitur: model -> repositories/<x>_repo.py -> services/<x>_service.py
+ -> schemas/<x>.py -> api/routes/<x>.py -> include_router di app/main.py.
+ Tabel baru otomatis dibuat saat startup (Base.metadata.create_all). Daftarkan
+ model baru di app/models/__init__.py (__all__).
+ Endpoint chatbot: WAJIB Depends(require_service_key). JANGAN pakai
+ get_current_user_id (pelanggan WhatsApp tidak punya JWT).
 
-------------------------------------------------------------------------------
- B1. CUSTOMERS  (tabel + endpoint upsert & lookup)
-------------------------------------------------------------------------------
- Dipakai chatbot: saat checkout, simpan/ambil data pelanggan by nomor WA, lalu
- pakai customer_id-nya untuk membuat order.
 
- File yang dibuat/diubah:
-   - app/models/customer.py            (baru)
-   - app/models/__init__.py            (daftarkan Customer)
-   - app/schemas/customer.py           (baru)
-   - app/repositories/customer_repo.py (baru)
-   - app/services/customer_service.py  (baru)
-   - app/api/routes/customer.py        (baru) -> Depends(require_service_key)
-   - app/main.py                       (include_router customer)
+==============================================================================
+ B3. GET STATUS PESANAN
+==============================================================================
+ File: tambah route di app/api/routes/order.py + fungsi di order_service/repo.
 
- Model customers (C300 Tabel 3.7) — NB: dipakai juga oleh C1 (2 kolom tambahan):
-   id            INT PK autoincrement
-   nama          String(100)  not null
-   nomor_wa      String(20)   unique, not null, index
-   alamat        Text         nullable
-   is_verified   Boolean      default False
-   created_at    DateTime     server_default now()
+ Endpoint (Depends(require_service_key)):
+   GET /orders?nomor_wa=628123456789
+   - Ambil 1 order TERBARU milik customer dengan nomor_wa tsb (order_by
+     created_at DESC, limit 1).
+   - Response 200: GUNAKAN response_model OrderOut yang SUDAH ada (yang dipakai
+     POST /orders), termasuk objek "invoice" di dalamnya.
+   - Response 404 jika customer tidak ada / belum punya order:
+       { "detail": "order not found" }
 
- Endpoint:
-   GET /customers?nomor_wa=628123456789
-     Response 200 (ketemu):
-       { "customer_id":1001, "nomor_wa":"628123456789", "nama":"Budi",
-         "alamat":"Jl. Mawar 10, Batam", "is_verified":false,
-         "created_at":"2026-06-21T10:00:00Z" }
-     Response 404 (belum ada): { "detail":"not found" }
+ Selesai jika: GET /orders?nomor_wa=<wa> mengembalikan order terbaru + invoice;
+   404 saat tidak ada.
 
-   POST /customers   (UPSERT by nomor_wa: kalau ada -> update, kalau belum -> buat)
-     Request:
-       { "nomor_wa":"628123456789", "nama":"Budi", "alamat":"Jl. Mawar 10, Batam" }
-     Response 200/201: (sama seperti GET di atas)
 
- Logika service (POST): cari by nomor_wa; jika ada update nama/alamat; jika tidak
-   insert baru; return customer.
- Catatan: tabel TIDAK punya kolom nomor HP terpisah -> nomor HP = nomor_wa
-   (memang sengaja; chatbot auto-isi dari nomor pengirim).
- Selesai jika: POST 2x dengan nomor_wa sama tidak bikin duplikat (customer_id
-   tetap), dan GET mengembalikan data terbaru.
-
-------------------------------------------------------------------------------
- B2. ORDERS — create_order_chatbot (C300 TOTI-13) + tabel orders & order_items
-------------------------------------------------------------------------------
- Dipakai chatbot: setelah pelanggan konfirmasi pesanan & identitas, chatbot
- membuat order + invoice, lalu lanjut ke pembayaran.
-
- File yang dibuat/diubah:
-   - app/models/order.py            (baru: Order, OrderItem)
-   - app/models/invoice.py          (baru: Invoice)   (boleh digabung di order.py)
-   - app/models/__init__.py         (daftarkan Order, OrderItem, Invoice)
-   - app/schemas/order.py           (baru: OrderCreate, OrderItemIn, OrderOut)
-   - app/repositories/order_repo.py (baru)
-   - app/services/order_service.py  (baru)
-   - app/api/routes/order.py        (baru) -> Depends(require_service_key)
-   - app/main.py                    (include_router order)
-
- Model orders (C300 Tabel 3.5):
-   id                   INT PK
-   customer_id          INT FK(customers.id) not null
-   handled_by           INT FK(users.id) nullable
-   status               String/Enum default "pending"
-                        nilai: pending|in_process|ready|delivered|picked_up|cancelled
-   metode_pengiriman    String/Enum  "pickup"|"delivery"
-   total_harga_pesanan  Numeric(10,2)
-   created_via          String/Enum default "web"   (isi "ChatBot" dari chatbot)
-   created_at, updated_at DateTime
-
- Model order_items (C300 Tabel 3.14):
-   id INT PK; order_id FK(orders.id); product_id FK(products.id);
-   jumlah INT; custom_decoration_charge Numeric(10,2) default 0;
-   subtotal Numeric(10,2); hpp_snapshot Numeric(10,2)
-
- Model invoices (C300 Tabel 3.15):
-   id INT PK; order_id FK(orders.id); nomor_invoice String(50) unique;
-   total_tagihan Numeric(10,2);
-   status String/Enum default "unpaid"  (unpaid|partial|paid|refunded);
-   updated_at DateTime
-
- Endpoint:
-   POST /orders     (header X-Service-Key)
-     Request:
-       { "customer_id":1001,
-         "items":[ {"product_id":5,"jumlah":2}, {"product_id":8,"jumlah":1} ],
-         "metode_pengiriman":"pickup",          // "pickup"|"delivery"
-         "created_via":"ChatBot",
-         "catatan":"tulisan: Happy Birthday"     // opsional, boleh diabaikan
-       }
-     Response 201:
-       { "order_id":30012, "nomor_invoice":"INV-20260621-30012",
-         "total_harga_pesanan":175000.00,
-         "status":"pending", "invoice_status":"unpaid",
-         "items":[
-           {"product_id":5,"nama_produk":"Brownies Coklat","jumlah":2,"subtotal":100000.00},
-           {"product_id":8,"nama_produk":"Bolu Pandan","jumlah":1,"subtotal":75000.00}
-         ] }
-
- Logika service (jalankan dalam 1 transaksi DB):
-   1) Validasi: tiap product_id ada & is_active=True; kalau tidak -> 400
-      { "detail":"product 8 not available" }.
-   2) Cek ketersediaan (C3): hitung is_available dari resep vs stok; kalau ada
-      item tak tersedia -> 400 { "detail":"product X out of stock" }.
-   3) Hitung subtotal = harga_jual * jumlah; hpp_snapshot = hpp_total saat ini.
-      total = sum(subtotal).
-   4) Insert orders (status="pending", created_via dari request).
-   5) Insert order_items.
-   6) Buat nomor_invoice unik (mis. "INV-YYYYMMDD-{order_id}") + insert invoices
-      (total_tagihan=total, status="unpaid").
-   7) Return seperti contract di atas.
-   ATURAN 1 TRANSAKSI AKTIF / pelanggan: kalau customer_id masih punya order
-   dengan invoice_status != paid dan order.status bukan cancelled/picked_up ->
-   tolak 409 { "detail":"customer has an active unpaid order","order_id":30010 }.
- Selesai jika: order + order_items + invoice tercatat benar; total cocok; aturan
-   409 jalan; created_via tersimpan "ChatBot".
-
-------------------------------------------------------------------------------
- B3. ORDER STATUS — get_order_status (C300 TOTI-18)
-------------------------------------------------------------------------------
- Dipakai chatbot: pelanggan tanya "status pesanan saya".
- File: tambah fungsi di order_repo/order_service + route di api/routes/order.py.
-
- Endpoint:
-   GET /orders?nomor_wa=628123456789      (ambil order TERBARU milik nomor itu)
-   (alternatif setara: GET /customers/{nomor_wa}/orders/latest)
-   Header X-Service-Key.
-     Response 200:
-       { "order_id":30012, "nomor_invoice":"INV-20260621-30012",
-         "order_status":"in_process",   // pending|in_process|ready|delivered|picked_up|cancelled
-         "invoice_status":"partial",    // unpaid|partial|paid|refunded
-         "metode_pengiriman":"pickup",
-         "total_harga_pesanan":175000.00,
-         "amount_paid":87500.00, "amount_due":87500.00,
-         "items":[ {"product_id":5,"nama_produk":"Brownies Coklat","jumlah":2},
-                   {"product_id":8,"nama_produk":"Bolu Pandan","jumlah":1} ],
-         "created_at":"2026-06-21T10:05:00Z",
-         "estimated_ready_at":"2026-06-22T09:00:00Z"   // opsional
-       }
-     Response 404: pelanggan tak punya order.
- Logika: join customers(nomor_wa) -> orders (order_by created_at desc, ambil 1)
-   -> invoice + order_items. amount_paid = sum(payments.jumlah_bayar success);
-   amount_due = total_tagihan - amount_paid.
- Selesai jika: setelah DP, invoice_status="partial" & amount_due benar = 50%.
-
-------------------------------------------------------------------------------
+==============================================================================
  B4. CANCEL ORDER
-------------------------------------------------------------------------------
- Dipakai chatbot: pelanggan minta batal SEBELUM bayar.
+==============================================================================
+ File: tambah route di app/api/routes/order.py + fungsi di order_service.
 
- Endpoint:
-   POST /orders/{order_id}/cancel    (header X-Service-Key)
-     Response 200: { "order_id":30012, "status":"cancelled" }
-     Response 409 (sudah dibayar): { "detail":"order already paid" }
- Logika: jika invoice_status != unpaid -> 409. Else set order.status="cancelled".
-   (Refund penuh oleh penjual = TOTI-19 process_refund; itu di luar chatbot.)
- Selesai jika: order unpaid bisa dibatalkan; order yang sudah bayar ditolak 409.
+ Endpoint (Depends(require_service_key)):
+   POST /orders/{order_id}/cancel
+   - Jika invoice.status != "unpaid"  -> 409 { "detail": "order already paid" }
+   - Selain itu set orders.status = "cancelled".
+   - Response 200: GUNAKAN response_model OrderOut (status="cancelled").
 
-------------------------------------------------------------------------------
- B5. PAYMENT — create_payment / verify_payment (C300 TOTI-17 / TOTI-08)
-     SEMUA endpoint pembayaran + integrasi Midtrans ASLI dibuat di BACKEND INI
-     (bukan repo terpisah, bukan di chatbot). Chatbot 100% MOCK sampai ini jadi.
-------------------------------------------------------------------------------
- File yang dibuat/diubah:
-   - app/models/payment.py          (baru: Payment)
-   - app/models/__init__.py         (daftarkan Payment)
-   - app/schemas/payment.py         (baru)
-   - app/services/payment_service.py(baru: panggil Midtrans + update invoice)
-   - app/api/routes/payment.py      (baru):
-       * POST /payments                  -> Depends(require_service_key)
-       * GET  /payments/{order_id}/status -> Depends(require_service_key)
-       * POST /payments/notify (webhook Midtrans) -> TANPA auth user, tapi WAJIB
-         verifikasi signature_key Midtrans
-   - app/main.py (include_router payment)
+ Selesai jika: order unpaid -> "cancelled"; order yang sudah bayar -> 409.
+
+
+==============================================================================
+ C3. FIELD is_available PADA PRODUK  (dipakai B2 & chatbot)
+==============================================================================
+ Definisi: produk tersedia jika SETIAP bahan pada resepnya (tabel recipes) punya
+ stok cukup di stock_items untuk membuat 1 unit. Produk TANPA resep = tersedia
+ (is_available=true).
+
+ Yang dikerjakan:
+   1) app/services/product_service.py: fungsi is_available(product, db) -> bool
+      (cek tiap Recipe.qty_bahan <= StockItem.stok untuk produk itu).
+   2) app/schemas/product.py: tambah field di ProductOut:
+         is_available: bool
+   3) Isi field tsb di response GET /products/ dan GET /products/{id}.
+   4) Di POST /orders (B2) langkah validasi: jika ada item dengan
+      is_available=false -> 400 { "detail": "product <id> out of stock" }.
+
+ Selesai jika: produk yang resepnya kekurangan bahan -> is_available=false di
+   GET /products/, dan POST /orders menolak item itu (400).
+
+
+==============================================================================
+ B5. PAYMENT + MIDTRANS  (semua di backend; chatbot tidak menyimpan key apa pun)
+==============================================================================
+ File: app/models/payment.py (Payment) + daftarkan di __init__ ;
+       app/schemas/payment.py ; app/services/payment_service.py ;
+       app/api/routes/payment.py ; include_router di main.py.
+ Midtrans Server Key HANYA di .env backend.
 
  Model payments (C300 Tabel 3.16):
    id INT PK; invoice_id FK(invoices.id); pg_transaction_id String(100) nullable;
-   jumlah_bayar Numeric(10,2); payment_method String(50) (QRIS|VA|Cash);
-   verified_by INT FK(users.id) nullable;
-   payment_status String/Enum (Success|Failed|Refunded);
-   payment_type String/Enum (DP|Final); created_at DateTime
+   jumlah_bayar Numeric(10,2); payment_method String(50);
+   payment_status String (Success|Failed|Refunded);
+   payment_type String (DP|Final); verified_by FK(users.id) nullable;
+   created_at DateTime.
 
- B5a. Buat tagihan
+ B5a. Buat tagihan  (Depends(require_service_key))
    POST /payments
      Request:
-       { "order_id":30012,             // atau "nomor_invoice":"INV-..."
-         "payment_type":"DP",          // "DP" | "Final"
-         "amount":87500.00,            // nominal yang harus dibayar SEKARANG
-         "customer_name":"Budi", "customer_phone":"628123456789" }
+       { "order_id": 30012, "payment_type": "DP", "amount": 87500.00,
+         "customer_name": "Budi", "customer_phone": "628123456789" }
+       (payment_type bernilai "DP" atau "Final". amount = nominal yang dibayar
+        sekarang; chatbot yang menghitung 50% untuk DP.)
      Response 201:
-       { "transaction_id":"MID-abc123",   // -> payments.pg_transaction_id
-         "order_id":30012, "payment_type":"DP", "amount":87500.00,
-         "payment_method":"VA",           // "QRIS"|"VA"|"Cash"
-         "bank":"bca", "va_number":"8808123456789012",
-         "qr_url":"https://.../qris/INV-....png",
-         "expiry_time":"2026-06-21T10:35:00Z", "status":"pending" }
-     Logika: panggil Midtrans Core API buat VA/QRIS; simpan payments (status
-       pending). Server key Midtrans HANYA di backend, jangan ke chatbot.
+       { "transaction_id": "MID-abc123", "order_id": 30012, "payment_type": "DP",
+         "amount": 87500.00, "payment_method": "VA", "bank": "bca",
+         "va_number": "8808123456789012",
+         "qr_url": "https://.../qris/INV-....png",
+         "expiry_time": "2026-06-21T10:35:00Z", "status": "pending" }
+     Logika: panggil Midtrans Core API -> buat VA/QRIS; insert payments
+       (payment_status awal mengikuti Midtrans = pending).
 
- B5b. Cek status (chatbot polling)
+ B5b. Cek status  (Depends(require_service_key))
    GET /payments/{order_id}/status
-     Response 200: { "order_id":30012, "status":"paid" }  // pending|paid|expired|failed
+     Response 200: { "order_id": 30012, "status": "pending" }
+     status bernilai salah satu: pending | paid | expired | failed.
 
- B5c. Webhook notifikasi Midtrans (diterima backend)
+ B5c. Webhook notifikasi Midtrans  (TANPA require_service_key)
    POST /payments/notify
-     - Verifikasi signature_key = SHA512(order_id + status_code + gross_amount +
-       ServerKey). Tolak kalau tidak cocok.
+     - WAJIB verifikasi signature_key =
+       SHA512(order_id + status_code + gross_amount + ServerKey). Tolak jika beda.
      - Mapping transaction_status Midtrans -> status kita:
-         settlement/capture -> paid ;  pending -> pending ;
-         expire -> expired ;  deny/cancel -> failed
-     - Saat paid: insert/update payments (payment_type DP/Final, jumlah_bayar,
-       payment_method, payment_status=Success) lalu update invoices.status:
-       "partial" jika baru DP, "paid" jika total terbayar lunas.
-     - Disarankan: setelah paid, PUSH ke chatbot (lihat C4) biar pelanggan
-       langsung dinotifikasi. Kalau tidak, chatbot tetap mendeteksi via B5b.
- Selesai jika: bayar DP -> invoice "partial"; pelunasan -> "paid"; signature
-   webhook diverifikasi; chatbot bisa baca status "paid" di B5b.
+         settlement, capture -> paid ; pending -> pending ;
+         expire -> expired ; deny, cancel -> failed.
+     - Saat paid: insert/update payments (payment_status=Success) lalu set
+       invoices.status: "partial" jika baru DP, "paid" jika total lunas.
+
+ Selesai jika: POST /payments balas VA/QR; bayar DP -> invoice "partial",
+   lunas -> "paid"; GET /payments/{order_id}/status mengembalikan "paid" setelah
+   webhook diterima.
 
 
 ==============================================================================
- C. FITUR YANG SUDAH DIPUTUSKAN — TINGGAL DIBANGUN
- (keputusan desain sudah final; ini juga kerjaan backend, dibuat bareng B)
+ C2. ENDPOINT DAFTAR NOMOR ADMIN PENANGAN TAKEOVER  (dinamis via RBAC)
 ==============================================================================
+ Yang dikerjakan:
+   1) app/models/user.py: tambah kolom  handles_takeover Boolean default False.
+   2) Endpoint untuk CHATBOT (Depends(require_service_key)):
+        GET /admin/takeover-handlers
+          Response 200: { "numbers": ["628111...", "628222..."] }
+          Isi: kolom nomor_wa_admin dari semua user yang is_active=true DAN
+               handles_takeover=true.
+   3) Endpoint untuk OWNER (Depends(require_owner), pakai JWT) untuk meng-set
+      kolom itu dari Admin Site:
+        PATCH /users/{user_id}/takeover-handler
+          Request: { "handles_takeover": true }
+          Response 200: { "user_id": 5, "handles_takeover": true }
 
-------------------------------------------------------------------------------
- C1. HUMAN TAKEOVER — disimpan di backend
-------------------------------------------------------------------------------
- Dipakai chatbot: saat escalate_to_admin (mis. pesanan custom), chatbot menandai
- sesi pelanggan supaya bot BERHENTI auto-reply; Admin mematikan takeover lewat
- Admin Site setelah selesai menangani.
-
- Tambahan kolom di tabel customers (selain field B1):
-   human_takeover_active  Boolean   default False
-   takeover_expires_at    DateTime  nullable
-
- Endpoint untuk CHATBOT (Depends(require_service_key)):
-   POST /customers/{nomor_wa}/takeover
-     Request : { "active":true, "expires_at":"2026-06-28T10:00:00Z" }
-               (expires_at null = tanpa kadaluarsa; chatbot kirim now+7 hari)
-     Response: { "nomor_wa":"628...", "human_takeover_active":true,
-                 "expires_at":"2026-06-28T10:00:00Z" }
-   GET /customers/{nomor_wa}/takeover
-     Response: (sama) — chatbot cek status; expired -> anggap non-aktif.
-
- Endpoint untuk ADMIN SITE (Depends(require_admin_or_owner), JWT):
-   - Mematikan/menyalakan takeover dari UI Admin (mis. PATCH
-     /customers/{id}/takeover { "active": false }).
-
- Logika: set kedua kolom; jika active=false -> expires_at = null.
- Selesai jika: chatbot POST takeover -> tersimpan; GET mengembalikannya; Admin
-   Site bisa mematikan; saat aktif chatbot stop auto-reply (logika di chatbot,
-   sumber kebenaran status = backend).
- Sisi chatbot: SUDAH menulis takeover (kini ke mock) & akan baca dari GET di
-   atas — tinggal swap saat endpoint jadi.
-
-------------------------------------------------------------------------------
- C2. NOMOR ADMIN PENANGAN TAKEOVER — dinamis via RBAC
-------------------------------------------------------------------------------
- Owner menentukan (lewat Admin Site / RBAC) admin mana yang menangani custom
- order & human takeover. Chatbot mengambil daftar nomor itu dari backend.
-
- Backend:
-   - Tandai admin penanggung jawab: tambah kolom users.handles_takeover (Boolean,
-     default False), Owner toggle per-admin. Nomor tujuan = users.nomor_wa_admin
-     (kolom ini sudah ada di skema).
-   - Endpoint untuk CHATBOT (Depends(require_service_key)):
-       GET /admin/takeover-handlers
-         Response: { "numbers": ["628111...", "628222..."] }
-         Isi: nomor_wa_admin dari user (role admin/owner) yang AKTIF & ditandai
-              handles_takeover. Boleh >1 (broadcast). Kosong -> chatbot fallback
-              ke env ADMIN_WA_NUMBER.
-   - Endpoint untuk ADMIN SITE (Depends(require_owner), JWT): Owner set/clear
-     handles_takeover (mis. PATCH /users/{id} { "handles_takeover": true }).
-
- Sisi chatbot: SUDAH memanggil GET /admin/takeover-handlers (kini mock -> []),
-   menotifikasi SEMUA nomor hasilnya, fallback ke ADMIN_WA_NUMBER bila kosong.
- Selesai jika: Owner assign admin X -> escalate_to_admin kirim notif WA ke
-   nomor admin X (dan admin lain yang ditandai), bukan ke env lagi.
-
-------------------------------------------------------------------------------
- C3. KETERSEDIAAN PRODUK JADI — dihitung dari resep vs stok
-------------------------------------------------------------------------------
- Produk "tersedia" jika SEMUA bahan di resepnya (tabel recipes) punya stok cukup
- di stock_items untuk membuat minimal 1 unit. TIDAK menambah kolom stok di
- products (dihitung on-the-fly).
-
- Backend:
-   - app/services/product_service.py (atau recipe/stock service): fungsi
-     is_available(product) -> cek tiap Recipe.qty_bahan <= stok tersedia di
-     StockItem. (Produk tanpa resep -> anggap tersedia / sesuai kebijakan.)
-   - app/schemas/product.py: tambah field computed di ProductOut:
-         is_available: bool = True
-   - GET /products & GET /products/{id}: isi is_available hasil perhitungan.
-   - Dipakai juga di B2 langkah 2 (tolak item habis -> 400).
-
- Sisi chatbot: SUDAH konsumsi ProductOut.is_available — get_menu menandai item
-   "(sedang tidak tersedia)", add_to_cart menolaknya. (Field absen -> dianggap
-   tersedia, aman.)
- Selesai jika: produk yang resepnya kurang bahan -> is_available=false, dan
-   create_order menolaknya (400).
-
-------------------------------------------------------------------------------
- C4. PUSH status "READY" (& opsional "PAID") ke chatbot
-------------------------------------------------------------------------------
- Chatbot harus PROAKTIF memberi tahu pelanggan (§10.13), mis. "pesanan siap".
- Endpoint PENERIMA-nya SUDAH ada di chatbot — kamu cukup MEMANGGILNYA:
-
-   (1) WAJIB — saat order.status berubah jadi "ready" (dari Admin Site):
-       POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready   (body kosong)
-       (Status "ready" tak bisa dideteksi chatbot tanpa diberi tahu -> wajib.)
-   (2) OPSIONAL — saat pembayaran PAID (di webhook Midtrans /payments/notify):
-       boleh ikut push; tapi chatbot juga sudah deteksi via polling B5b.
-
- Implementasi (httpx, fire-and-forget) di service yang meng-update order.status:
-       import httpx
-       try:
-           async with httpx.AsyncClient(timeout=5) as c:
-               await c.post(f"{settings.chatbot_url}/webhook/internal/orders/{order_id}/ready")
-       except Exception:
-           pass   # jangan gagalkan update status hanya karena notifikasi
- Tambah env: CHATBOT_URL (mis. http://chatbot-service:8000).
- Selesai jika: ubah status order jadi "ready" di Admin -> pelanggan otomatis
-   menerima WhatsApp "pesanan siap" (delivery: berisi nama + alamat toko).
+ Selesai jika: Owner set handles_takeover=true pada user X (yang punya
+   nomor_wa_admin) -> GET /admin/takeover-handlers memuat nomor X.
 
 
 ==============================================================================
- D. LAMPIRAN — RINGKAS FIELD TABEL YANG DISENTUH CHATBOT (referensi C300)
+ C4. PUSH STATUS "READY" KE CHATBOT
 ==============================================================================
- products       : id, nama_produk, deskripsi, kategori, harga_jual, hpp_total,
-                  image_url, is_active, updated_at  (+ is_available computed, C3)
- customers      : id, nama, nomor_wa(unique), alamat, is_verified, created_at
-                  (+ human_takeover_active, takeover_expires_at  -> C1)
- orders         : id, customer_id(FK), handled_by(FK users,NULL),
-                  status(ENUM,default pending), metode_pengiriman(ENUM
-                  pickup/delivery), total_harga_pesanan, created_via(ENUM
-                  Web/ChatBot), created_at, updated_at
- order_items    : id, order_id(FK), product_id(FK), jumlah,
-                  custom_decoration_charge(default 0), subtotal, hpp_snapshot
- invoices       : id, order_id(FK), nomor_invoice(unique), total_tagihan,
-                  status(ENUM unpaid/partial/paid/refunded), updated_at
- payments       : id, invoice_id(FK), pg_transaction_id(NULL), jumlah_bayar,
-                  payment_method(QRIS/VA/Cash), verified_by(FK users,NULL),
-                  payment_status(Success/Failed/Refunded),
-                  payment_type(ENUM DP/Final), created_at
- users          : (sudah ada) + handles_takeover Boolean, nomor_wa_admin  -> C2
+ Yang dikerjakan:
+   1) Tambah env: CHATBOT_URL = http://chatbot-service:8000
+   2) Di service yang MENGUBAH orders.status menjadi "ready" (dari Admin Site),
+      setelah commit, kirim:
+        POST {CHATBOT_URL}/webhook/internal/orders/{order_id}/ready   (body kosong)
+      Pakai httpx fire-and-forget, bungkus try/except supaya update status tidak
+      gagal kalau chatbot sedang mati:
+        import httpx
+        try:
+            async with httpx.AsyncClient(timeout=5) as c:
+                await c.post(f"{settings.chatbot_url}/webhook/internal/orders/{order_id}/ready")
+        except Exception:
+            pass
+
+ Catatan: status "paid" TIDAK perlu di-push — chatbot sudah mendeteksinya lewat
+ GET /payments/{order_id}/status (B5b). Yang di-push HANYA "ready".
+
+ Selesai jika: mengubah status order jadi "ready" -> chatbot mengirim WhatsApp
+   "pesanan siap" ke pelanggan.
 
 
 ==============================================================================
- RINGKAS URUTAN KERJA
-   1) B1 + B2 + B3   (customers, create order, order status)  <= MULAI DI SINI
-   2) B4 (cancel) + C3 (is_available, dipakai B2)
-   3) B5 (payment + Midtrans)
-   4) C1 (takeover) + C2 (admin handlers) + C4 (push ready)
- Jangan lupa: Depends(require_service_key) di tiap endpoint chatbot di atas.
- Tidak ada lagi keputusan yang ditunggu — semua sudah final.
+ LAMPIRAN — FIELD TABEL YANG DISENTUH (referensi C300)
+==============================================================================
+ products  : id, nama_produk, deskripsi, kategori, harga_jual, hpp_total,
+             image_url, is_active, updated_at   (+ is_available computed -> C3)
+ customers : id, nama, nomor_wa(unique), alamat, is_verified,
+             human_takeover_active, takeover_expires_at, created_at   [SUDAH ADA]
+ orders    : id, customer_id(FK), handled_by(FK users,NULL), status,
+             metode_pengiriman, total_harga_pesanan, created_via,
+             created_at, updated_at   [SUDAH ADA]
+ order_items: id, order_id(FK), product_id(FK), jumlah,
+              custom_decoration_charge, subtotal, hpp_snapshot   [SUDAH ADA]
+ invoices  : id, order_id(FK), nomor_invoice(unique), total_tagihan,
+             status(unpaid|partial|paid|refunded), updated_at   [SUDAH ADA]
+ payments  : id, invoice_id(FK), pg_transaction_id, jumlah_bayar, payment_method,
+             payment_status(Success|Failed|Refunded), payment_type(DP|Final),
+             verified_by(FK users,NULL), created_at   -> B5
+ users     : (sudah ada) + handles_takeover Boolean, nomor_wa_admin   -> C2
+
+
+==============================================================================
+ URUTAN KERJA: B3 -> B4 -> C3 -> B5 -> C2 -> C4
+ Tiap endpoint chatbot: WAJIB Depends(require_service_key).
 ==============================================================================
