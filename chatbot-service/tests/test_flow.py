@@ -267,35 +267,6 @@ async def test_background_detects_paid(monkeypatch, patch_externals):
 
 
 # ── Contract guard: shape the chatbot sends to the backend (for Nicholas) ─────
-# ── Deterministic intent router (no LLM; reliable with thinking OFF) ───────────
-async def test_intent_menu_returns_real_products():
-    r = await handle_message(WA, "ada menu apa aja?")
-    assert "Brownies Coklat" in r.text and "Bolu Pandan" in r.text  # not hallucinated
-
-
-async def test_intent_compare_routes_to_compare_tool():
-    r = await handle_message(WA, "bedanya brownies sama bolu pandan apa?")
-    assert "Perbandingan" in r.text
-    assert "Brownies Coklat" in r.text and "Bolu Pandan" in r.text
-
-
-async def test_intent_order_routes_to_add_to_cart():
-    r = await handle_message(WA, "mau pesan brownies coklat 2 sama bolu pandan 1")
-    assert "Rp175.000" in r.text
-    assert (await store.get_or_create_session(WA)).state == State.AWAITING_CART_CONFIRMATION
-
-
-async def test_intent_order_while_pending_is_rejected():
-    import datetime as dt
-    await store.create_pending_order(
-        wa_number=WA, order_ref="INV-X", payment_type="full", total_amount=100,
-        amount_due=100, items_json="[]", customer_json="{}", delivery_method="pickup",
-        expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30),
-    )
-    r = await handle_message(WA, "mau pesan brownies coklat 2")
-    assert "website" in r.text.lower()
-
-
 async def test_create_order_mock_contract_shape():
     # Exact request shape the chatbot sends to the real POST /orders (Nicholas doc).
     order = await mock_backend.create_order(

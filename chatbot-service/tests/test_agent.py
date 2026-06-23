@@ -63,26 +63,6 @@ async def test_agent_executes_tool_call(monkeypatch):
     assert "Rp50.000" in out
 
 
-async def test_agent_text_json_tool_call_fallback(monkeypatch):
-    """Thinking OFF: qwen3 may emit the tool call as plain JSON text instead of a
-    structured tool_call. The agent must still detect and execute it."""
-    from app.backend_client import products as products_api
-
-    async def fake_list(only_active=True, kategori=None):
-        return FAKE_PRODUCTS
-    monkeypatch.setattr(products_api, "list_products", fake_list)
-
-    _mock_retrieval(monkeypatch, 0.0)
-    # No structured tool_calls; tool call sits in content as text.
-    ai = AIMessage(content='{"name": "get_menu", "arguments": {}}')
-    _mock_llm(monkeypatch, ai)
-
-    set_turn_context(TurnContext(wa_number=WA))
-    out = await agent_mod.run_agent(WA, "menu apa aja", history=[])
-    assert "Brownies Coklat" in out          # executed, not echoed as JSON
-    assert "{" not in out                     # raw JSON not leaked to user
-
-
 async def test_agent_answers_from_faq_when_in_scope(monkeypatch):
     _mock_retrieval(monkeypatch, 0.9)        # high similarity -> in scope
     ai = AIMessage(content="Kami buka jam 09.00-19.00 WIB.")

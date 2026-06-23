@@ -8,7 +8,7 @@ agent. Returns a Reply; the caller is responsible for actually sending it.
 import logging
 from dataclasses import dataclass, field
 
-from app.conversation import checkout, intent, store
+from app.conversation import checkout, store
 from app.conversation.context import OutboundMedia, TurnContext, set_turn_context
 from app.conversation.states import State, text_is_cancel, text_is_confirm
 from app.core.config import settings
@@ -73,11 +73,8 @@ async def handle_message(wa_number: str, text: str) -> Reply:
 async def _run_agent_turn(wa_number: str, text: str) -> Reply:
     ctx = TurnContext(wa_number=wa_number)
     set_turn_context(ctx)
-    # Deterministic intent first (fast, no hallucination); fall back to the LLM.
-    answer = await intent.try_handle(text)
-    if answer is None:
-        history = await store.recent_history(wa_number, limit=6)
-        answer = await run_agent(wa_number, text, history)
+    history = await store.recent_history(wa_number, limit=6)
+    answer = await run_agent(wa_number, text, history)
     # A tool (add_to_cart) may have requested a state transition.
     if ctx.next_state:
         await store.set_state(wa_number, ctx.next_state)

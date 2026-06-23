@@ -36,9 +36,9 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.7
     llm_top_p: float = 0.8
     llm_num_ctx: int = 32768
-    # qwen3 "thinking" mode. Off by default: faster replies, no reasoning tokens,
-    # and more consistent tool-call formatting for a small model.
-    llm_reasoning: bool = False
+    # qwen3 "thinking" mode. ON: most reliable structured tool-calling on this
+    # small model. (Trade-off: higher latency on CPU — see README perf notes.)
+    llm_reasoning: bool = True
     # Keep models resident in Ollama to avoid ~70s cold-start reloads. -1 = never
     # unload (Ollama expects an int or a duration like "30m"). Also set
     # OLLAMA_MAX_LOADED_MODELS=2 on the Ollama server so the chat + embedding
