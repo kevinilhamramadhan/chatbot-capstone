@@ -32,21 +32,6 @@ def _clean(text: str | None) -> str:
     return _THINK_RE.sub("", text).strip()
 
 
-async def _run_tool_calls(calls: list[dict]) -> list[str]:
-    outputs: list[str] = []
-    for tc in calls:
-        tool = TOOLS_BY_NAME.get(tc["name"])
-        if tool is None:
-            logger.warning("Requested unknown tool: %s", tc["name"])
-            continue
-        try:
-            outputs.append(str(await tool.ainvoke(tc.get("args", {}))))
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("Tool %s failed: %s", tc["name"], exc)
-            outputs.append("Maaf, ada kendala saat memproses permintaanmu. Coba lagi ya 🙏")
-    return outputs
-
-
 async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
     # 1) Retrieval + scope guard (PROMPT §7).
     retrieval = retrieve(user_text)
@@ -55,24 +40,20 @@ async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
         "RAG best_sim=%.3f in_scope=%s", retrieval.best_similarity, retrieval.in_scope
     )
 
-    # Keep the system message CONSTANT (system prompt + tool schemas) so Ollama
-    # can reuse its cached prefix across turns — on CPU this turns a ~35s prefill
-    # into ~5s. Variable RAG context goes into the user turn, not the system msg.
-    messages: list = [SystemMessage(content=SYSTEM_PROMPT)]
+    system = SYSTEM_PROMPT
+    if rag_context:
+        system += (
+            "\n\nKONTEKS FAQ (jawab pertanyaan umum berdasarkan ini):\n" + rag_context
+        )
+
+    messages: list = [SystemMessage(content=system)]
     for h in history:
         messages.append(
             HumanMessage(content=h["content"])
             if h["role"] == "user"
             else AIMessage(content=h["content"])
         )
-    if rag_context:
-        user_content = (
-            "Konteks FAQ (gunakan untuk menjawab kalau relevan):\n"
-            f"{rag_context}\n\n---\nPesan pelanggan: {user_text}"
-        )
-    else:
-        user_content = user_text
-    messages.append(HumanMessage(content=user_content))
+    messages.append(HumanMessage(content=user_text))
 
     llm = get_llm().bind_tools(ALL_TOOLS)
 
@@ -82,22 +63,29 @@ async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
         logger.exception("LLM invocation failed: %s", exc)
         return "Maaf, lagi ada gangguan di sistem kami. Coba beberapa saat lagi ya 🙏"
 
-    # 2) Tool calls (thinking ON: qwen3 emits structured tool_calls reliably).
-    calls = [
-        {"name": tc["name"], "args": tc.get("args", {})}
-        for tc in (getattr(ai, "tool_calls", None) or [])
-    ]
-
-    # 3) No tool call -> direct answer (FAQ / greeting / refusal).
-    if not calls:
+    # 2) No tool call -> direct answer (FAQ / greeting / refusal).
+    if not getattr(ai, "tool_calls", None):
         answer = _clean(ai.content)
-        # Hard scope guard: out-of-scope and no on-topic tool used -> refuse.
+        # Hard scope guard: out-of-scope and the model didn't use any on-topic
+        # tool -> refuse rather than answer from general knowledge.
         if not rag_context and not answer:
             return OUT_OF_SCOPE_REPLY
         return answer or OUT_OF_SCOPE_REPLY
 
-    # 4) Execute tools; their outputs are the user-facing reply.
-    outputs = await _run_tool_calls(calls)
+    # 3) Execute tools; their outputs are the user-facing reply.
+    outputs: list[str] = []
+    for tc in ai.tool_calls:
+        tool = TOOLS_BY_NAME.get(tc["name"])
+        if tool is None:
+            logger.warning("LLM requested unknown tool: %s", tc["name"])
+            continue
+        try:
+            result = await tool.ainvoke(tc["args"])
+            outputs.append(str(result))
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Tool %s failed: %s", tc["name"], exc)
+            outputs.append("Maaf, ada kendala saat memproses permintaanmu. Coba lagi ya 🙏")
+
     if not outputs:
         return _clean(ai.content) or OUT_OF_SCOPE_REPLY
     return "\n\n".join(outputs)

@@ -105,24 +105,6 @@ python -m scripts.chat_cli             # then just chat; /state to inspect, /qui
   curl -X POST http://localhost:8000/webhook/internal/takeover/<phone>/deactivate
   ```
 
-## Performance / latency (TOTI-N target: <60s)
-
-qwen3:1.7b runs on CPU, so latency needs care:
-- **Thinking ON** (`LLM_REASONING=true`) — qwen3 emits structured tool calls
-  reliably with thinking on (the small model is unreliable at tool-calling with it
-  off). Trade-off: higher latency on CPU.
-- **Stable prompt prefix** — the system prompt + tool schemas are kept constant so
-  Ollama caches the prefill (turns a ~35s CPU prefill into a few seconds); RAG
-  context goes in the user turn, not the system message.
-- **Keep models resident + pre-warm** — `LLM_KEEP_ALIVE=-1` and a startup pre-warm
-  avoid ~70s cold starts. **On the Ollama server set `OLLAMA_MAX_LOADED_MODELS=2`**
-  (and `OLLAMA_KEEP_ALIVE=-1`) so the chat + embedding models don't evict each other.
-
-⚠️ With thinking ON, warm LLM turns on this dev CPU can approach/exceed the 60s
-target. Verify on the deployment VPS — a **GPU** brings LLM turns to ~1–3s. A
-fine-tuned qwen3 (the team's planned AI work) would also let thinking stay off
-while keeping tool-calling reliable.
-
 ## Unit tests
 
 ```bash
