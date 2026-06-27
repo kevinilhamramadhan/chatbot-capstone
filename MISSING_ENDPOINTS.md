@@ -4,71 +4,56 @@ Status of every backend capability the chatbot depends on. Items still missing a
 **mocked** in the chatbot (`app/backend_client/mock_backend.py`, marked `# MOCK`);
 swap each mock for a real HTTP call once its endpoint ships.
 
-> The exact build spec sent to Nicholas lives in `UNTUK_NICHOLAS_backend_todo.txt`
-> (that file is the source of truth for what's left). This file is the chatbot-side
-> mirror.
+> The exact build spec sent to Nicholas lives in `UNTUK_NICHOLAS_backend_todo.txt`.
+> This file is the chatbot-side mirror.
 
-Last synced against `Nicholl2/Backend-Cakery` @ commit `62c9838` (Test Order by Chatbot).
+Last synced against `Nicholl2/Backend-Cakery` @ commit `0eac209` (Add Payment).
 
 ---
 
-## ✅ Built & verified working
+## ✅ Built on the backend (ready to wire)
 
 | Capability | Endpoint (live) | Notes |
 |---|---|---|
-| Double-prefix fix | `GET /products/`, `/faq`, … | clean paths; chatbot resolves automatically |
-| Product image | `ProductOut.image_url` | chatbot sends product photo when populated |
-| Service auth | `require_service_key` (`X-Service-Key`) | chatbot sends it on every backend call |
+| Double-prefix fix | `GET /products/`, `/faq`, … | clean paths |
+| Product image | `ProductOut.image_url` | chatbot sends photo when populated |
+| Service auth | `require_service_key` (`X-Service-Key`) | chatbot must send it |
 | Get customer | `GET /customers?nomor_wa=` | → `CustomerOut` |
 | Upsert customer | `POST /customers` | → `CustomerOut` |
-| Create order | `POST /orders` | → `OrderOut` (incl. nested `invoice`) |
-| Set takeover | `POST /customers/{nomor_wa}/takeover` | → `TakeoverStatus` |
-| Get takeover | `GET /customers/{nomor_wa}/takeover` | → `TakeoverStatus` (`is_expired`) |
+| Create order (B2) | `POST /orders` | → `OrderOut` (nested `invoice`) |
+| **Order status (B3)** | `GET /orders/latest?nomor_wa=` | → `OrderOut`; 404 if none |
+| **Cancel order (B4)** | `POST /orders/{order_id}/cancel` | |
+| **Payment (B5)** | `POST /payments`, `GET /payments/{order_id}/status`, `POST /payments/notify` | **real Midtrans charge** |
+| Takeover (C1) | `POST`/`GET /customers/{nomor_wa}/takeover` | → `TakeoverStatus` |
+| **Ready push (C4)** | backend POSTs `→ {chatbot_url}/webhook/internal/orders/{id}/ready` on status=ready | receiver already in chatbot |
 
-**Field-mapping deltas for the eventual swap** (adapter layer only, tools unchanged):
-- `CustomerOut` returns `id` (not `customer_id`) → map `id` → `customer_id`.
-- `OrderOut` returns order id as `id`, invoice number as `invoice.nomor_invoice`
-  (nested) → map accordingly.
-- `created_via` default is `"chatbot"` (lowercase).
+**Field/contract deltas for the swap** (adapter layer only — tools unchanged):
+- `CustomerOut`/`OrderOut` use `id` (not `customer_id`/`order_id`); invoice number is
+  nested at `OrderOut.invoice.nomor_invoice`.
+- Order status path is `GET /orders/latest?nomor_wa=` (not `/orders?nomor_wa=`).
+- **Payment charge** (`POST /payments`) body is `{order_id, payment_type, amount}`
+  where `payment_type ∈ {bank_transfer, qris}` = the **Midtrans channel** (NOT
+  DP/Final). DP-vs-full is conveyed via `amount`. `GET /payments/{id}/status`
+  returns `{order_id, status, amount_paid, amount_due, payments[]}`.
+- C4: set the backend's `CHATBOT_URL` to the chatbot's address so the ready-push lands.
 
-These are all still **mocked** in `mock_backend.py` today; the swap is ~1 line per
-function once we decide to wire them (see `UNTUK_NICHOLAS_backend_todo.txt` notes).
+These are still **mocked** in `mock_backend.py` today; swapping them to real HTTP is
+Kevin's small adapter change (no tool/flow changes).
 
 ---
 
-## ❌ Not built yet (chatbot still mocks / works around these)
-
-### B3 — get_order_status
-- Expected: `GET /orders?nomor_wa={wa}` → latest order as `OrderOut` (incl. `invoice`); 404 if none.
-- Now: chatbot reads its **local** `pending_orders` table.
-
-### B4 — cancel_order
-- Expected: `POST /orders/{order_id}/cancel` → `OrderOut` (status `cancelled`); 409 if already paid.
-- Now: chatbot cancels in its **local** table.
-
-### C3 — product availability (`is_available`)
-- Expected: computed `is_available: bool` on `ProductOut` (recipe vs `stock_items`),
-  and rejected in `POST /orders` when out of stock.
-- Now: chatbot treats missing field as available; `get_menu`/`add_to_cart` already
-  consume `is_available` once present.
-
-### B5 — payments + Midtrans
-- Expected (all in backend): `POST /payments`, `GET /payments/{order_id}/status`,
-  `POST /payments/notify` (Midtrans webhook). Supports `DP`/`Final`;
-  updates `invoices.status` (`partial`/`paid`).
-- Now: chatbot uses the local **MOCK** gateway (`services/payment-gateway`); will
-  point `PAYMENT_GATEWAY_URL` at the backend when ready. No Midtrans keys in chatbot.
+## ❌ Still NOT built (chatbot mocks / works around)
 
 ### C2 — admin takeover-handlers (dynamic via RBAC)
 - Expected: `GET /admin/takeover-handlers` (service key) → `{ "numbers": [...] }`
   (users with `handles_takeover=true`); Owner sets it via Admin Site.
 - Now: chatbot calls it (mock → `[]`) and falls back to env `ADMIN_WA_NUMBER`.
 
-### C4 — push "ready" → chatbot
-- Expected: when an order's status becomes `ready`, backend `POST`s to
-  `{CHATBOT_URL}/webhook/internal/orders/{order_id}/ready` (receiver already exists).
-- Now: triggered manually via that internal endpoint. ("paid" is not pushed —
-  chatbot detects it by polling B5b.)
+### C3 — product availability (`is_available`)
+- Expected: computed `is_available: bool` on `ProductOut` (recipe vs `stock_items`),
+  and reject out-of-stock items in `POST /orders`.
+- Now: chatbot treats a missing field as available; `get_menu`/`add_to_cart` already
+  consume `is_available` once present.
 
 ### Owner reports (low priority)
 - Expected: `GET /reports/financial`, `GET /reports/analytics` (Owner only).
