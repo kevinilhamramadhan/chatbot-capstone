@@ -4,7 +4,7 @@ import logging
 
 from langchain_core.tools import tool
 
-from app.backend_client import mock_backend
+from app.backend_client import api as backend
 from app.conversation import store
 from app.conversation.context import get_turn_context
 from app.core.config import settings
@@ -22,17 +22,16 @@ async def escalate_to_admin(reason: str) -> str:
     """
     wa = get_turn_context().wa_number
 
-    # 1) Set takeover flag (+expiry). Decision C1(b): backend is source of truth.
-    # We keep a local copy for the fast per-message check and ALSO persist to the
-    # backend (MOCK until POST /customers/{wa}/takeover exists — easy swap then).
+    # 1) Set takeover: local cache (fast per-message check) + backend (record).
     expires = await store.activate_takeover(wa)
-    await mock_backend.set_takeover(wa, True, expires.isoformat())
+    try:
+        await backend.set_takeover(wa, True, expires.isoformat())
+    except Exception as exc:  # noqa: BLE001 - local copy already set
+        logger.warning("backend set_takeover failed: %s", exc)
 
-    # 2) Notify the admin(s) via WhatsApp (REAL, via wwebjs-api).
-    # Decision C2: which admin handles takeover is dynamic (Owner-configured via
-    # RBAC). We fetch the handler numbers from the backend (MOCK for now) and fall
-    # back to the ADMIN_WA_NUMBER env var until that endpoint exists.
-    numbers = await mock_backend.get_takeover_admin_numbers()
+    # 2) Notify admin(s). C2 (dynamic handlers) not built yet -> [] -> fall back
+    # to the ADMIN_WA_NUMBER env var.
+    numbers = await backend.get_takeover_admin_numbers()
     if not numbers and settings.admin_wa_number:
         numbers = [settings.admin_wa_number]
     if not numbers:

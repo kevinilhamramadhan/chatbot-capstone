@@ -1,20 +1,15 @@
-"""Tool: get_order_status — reads the local pending order (backend GET is MOCK)."""
-
-import json
+"""Tool: get_order_status — reads the latest order from the backend (B3)."""
 
 from langchain_core.tools import tool
 
-from app.conversation import store
+from app.backend_client import api as backend
 from app.conversation.context import get_turn_context
 from app.tools.formatting import rupiah
 
-_STATUS_LABEL = {
-    "pending": "Menunggu pembayaran",
-    "paid": "Sudah dibayar, sedang diproses",
-    "ready": "Siap diambil/dikirim",
-    "expired": "Kedaluwarsa (belum dibayar)",
-    "cancelled": "Dibatalkan",
-}
+_ORDER = {"pending": "Menunggu pembayaran", "in_process": "Sedang diproses",
+          "ready": "Siap diambil/dikirim", "delivered": "Dikirim",
+          "picked_up": "Sudah diambil", "cancelled": "Dibatalkan"}
+_INV = {"unpaid": "belum dibayar", "partial": "DP terbayar", "paid": "lunas", "refunded": "dikembalikan"}
 
 
 @tool
@@ -22,17 +17,21 @@ async def get_order_status() -> str:
     """Cek status pesanan terakhir pelanggan. Gunakan saat pelanggan menanyakan
     progress atau status pesanannya.
     """
-    # MOCK — backend GET /orders endpoint belum ada; status diambil dari DB lokal.
     wa = get_turn_context().wa_number
-    order = await store.get_active_pending(wa)
-    if order is None:
+    try:
+        o = await backend.get_latest_order(wa)
+    except Exception:  # noqa: BLE001
+        return "Maaf, status pesanan lagi tidak bisa diambil. Coba lagi sebentar ya 🙏"
+    if not o:
         return "Saat ini kamu belum punya pesanan yang sedang berjalan."
 
-    items = json.loads(order.items_json or "[]")
-    item_lines = "\n".join(f"• {it['nama']} x{it['qty']}" for it in items)
-    label = _STATUS_LABEL.get(order.status, order.status)
+    inv = o.get("invoice") or {}
+    nomor = inv.get("nomor_invoice") or f"#{o.get('id')}"
+    order_lbl = _ORDER.get(o.get("status"), o.get("status"))
+    inv_lbl = _INV.get(inv.get("status"), inv.get("status"))
+    items = o.get("items") or []
     return (
-        f"Status pesanan *{order.order_ref}*: {label}\n"
-        f"{item_lines}\n"
-        f"Total: {rupiah(order.total_amount)} (yang harus dibayar: {rupiah(order.amount_due)})"
+        f"Status pesanan *{nomor}*: {order_lbl} (pembayaran: {inv_lbl})\n"
+        f"Jumlah item: {len(items)}\n"
+        f"Total: {rupiah(o.get('total_harga_pesanan'))}"
     )

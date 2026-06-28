@@ -13,10 +13,10 @@ import json
 import logging
 from datetime import datetime, timezone
 
+from app.backend_client import api as backend
 from app.conversation import store
 from app.conversation.states import State
 from app.core.config import settings
-from app.payment.client import payment_client
 from app.tools.formatting import rupiah
 from app.whatsapp_client.client import whatsapp_client
 
@@ -53,28 +53,22 @@ async def _check_once() -> None:
             )
             continue
 
-        # 2) Poll payment status.
+        # 2) Poll backend payment status (invoice: unpaid|partial|paid|refunded).
         try:
-            status = await payment_client.get_status(order.order_ref)
+            res = await backend.get_payment_status(order.order_ref)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Payment status check failed for %s: %s", order.order_ref, exc)
             continue
 
-        if status == "paid" and not order.notified_paid:
+        inv_status = (res or {}).get("invoice_status")
+        if inv_status in ("paid", "partial") and not order.notified_paid:
             await store.update_pending_order(order.id, status="paid", notified_paid=True)
             await store.set_state(order.wa_number, State.ORDER_ACTIVE)
             await _notify(
                 order.wa_number,
-                f"Pembayaran untuk pesanan *{order.order_ref}* sudah kami terima ✅\n"
+                "Pembayaran sudah kami terima ✅\n"
                 f"Jumlah: {rupiah(order.amount_due)}. Pesananmu akan segera kami proses. "
                 "Terima kasih! 🎂",
-            )
-        elif status == "expired":
-            await store.update_pending_order(order.id, status="expired")
-            await store.set_state(order.wa_number, State.IDLE)
-            await _notify(
-                order.wa_number,
-                f"Pembayaran pesanan *{order.order_ref}* kedaluwarsa. Silakan pesan ulang ya 🙏",
             )
 
 

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
 
     # ── Ollama (LLM + embeddings) ─────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
-    llm_model: str = "qwen3:1.7b"
+    llm_model: str = "qwen3.5:0.8b"
     embedding_model: str = "qwen3-embedding:0.6b"
     llm_temperature: float = 0.7
     llm_top_p: float = 0.8

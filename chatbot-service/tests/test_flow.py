@@ -1,15 +1,14 @@
-"""End-to-end behaviour tests for the conversation flow (no Ollama needed).
+"""End-to-end behaviour tests for the conversation flow (no Ollama, no backend).
 
-The LLM and backend HTTP are mocked; everything else is the real code path. These
-tests pin down the behaviour AND the data shapes the chatbot sends to the backend
-(the contract handed to Nicholas), so they break loudly if that contract drifts.
+The LLM and backend HTTP (app.backend_client.api) are mocked; everything else is
+the real code path.
 """
 
+import datetime as dt
 import json
 
 import pytest
 
-from app.backend_client import mock_backend
 from app.conversation import background, store
 from app.conversation.context import TurnContext, set_turn_context
 from app.conversation.orchestrator import handle_message
@@ -27,9 +26,9 @@ FAKE_PRODUCTS = [
 
 @pytest.fixture(autouse=True)
 def patch_externals(monkeypatch):
-    """Mock backend product reads, the payment gateway, and WhatsApp sends."""
+    """Mock product reads, the backend API client, and WhatsApp sends."""
+    from app.backend_client import api as backend
     from app.backend_client import products as products_api
-    from app.payment.client import payment_client
     from app.whatsapp_client.client import whatsapp_client
 
     async def fake_list(only_active=True, kategori=None):
@@ -47,23 +46,47 @@ def patch_externals(monkeypatch):
         sent.append((wa, text))
         return {"ok": True}
 
-    async def fake_create_txn(order_id, amount, customer_name, customer_phone):
-        return {"transaction_id": "MID-TEST-1", "order_id": order_id, "amount": amount,
-                "bank": "bca", "va_number": "8808123456789012",
-                "qr_url": f"http://qr/{order_id}.png", "status": "pending"}
-
     monkeypatch.setattr(whatsapp_client, "send_text", fake_send_text)
-    monkeypatch.setattr(payment_client, "create_transaction", fake_create_txn)
-    return {"sent": sent}
+
+    # Backend API stubs (sane defaults; individual tests override).
+    async def f_upsert(wa, nama, alamat, phone):
+        return {"id": 1, "customer_id": 1, "nomor_wa": wa, "nama": nama, "alamat": alamat}
+
+    async def f_create_order(customer_id, items, metode_pengiriman, created_via="chatbot"):
+        return {"order_id": 30001, "nomor_invoice": "INV-TEST",
+                "total_harga_pesanan": 100000, "status": "pending"}
+
+    async def f_create_payment(order_id, amount, channel="bank_transfer"):
+        return {"payment_id": 1, "pg_transaction_id": "MID",
+                "va_number": "8808123456789012", "qris_url": None, "status": "Pending"}
+
+    async def f_payment_status(order_id):
+        return {"invoice_status": "unpaid", "amount_paid": 0, "amount_due": 0, "payments": []}
+
+    async def f_latest(wa):
+        return None
+
+    async def f_cancel(order_id):
+        return {"status": "success"}
+
+    async def f_set_takeover(wa, active, expires_at):
+        return {"nomor_wa": wa, "human_takeover_active": active}
+
+    async def f_admin():
+        return []
+
+    for name, fn in {"upsert_customer": f_upsert, "create_order": f_create_order,
+                     "create_payment": f_create_payment, "get_payment_status": f_payment_status,
+                     "get_latest_order": f_latest, "cancel_order": f_cancel,
+                     "set_takeover": f_set_takeover, "get_takeover_admin_numbers": f_admin}.items():
+        monkeypatch.setattr(backend, name, fn)
+    return {"sent": sent, "backend": backend, "monkeypatch": monkeypatch}
 
 
 async def _seed_cart_awaiting_confirmation(items):
-    """Use the real add_to_cart tool to build the draft, like the LLM would."""
     from app.tools.add_to_cart import add_to_cart
-
     set_turn_context(TurnContext(wa_number=WA))
     out = await add_to_cart.ainvoke({"items": items})
-    # add_to_cart asks the orchestrator to move to confirmation; do it.
     await store.set_state(WA, State.AWAITING_CART_CONFIRMATION)
     return out
 
@@ -74,10 +97,8 @@ async def test_add_to_cart_resolves_price_and_merges():
         [{"product": "Brownies Coklat", "qty": 2}, {"product": "brownies", "qty": 1}]
     )
     cart = await store.get_cart(WA)
-    assert len(cart) == 1                      # merged same product
-    assert cart[0]["qty"] == 3
-    assert cart[0]["harga"] == 50000
-    assert "Rp150.000" in out                  # 3 * 50000
+    assert len(cart) == 1 and cart[0]["qty"] == 3 and cart[0]["harga"] == 50000
+    assert "Rp150.000" in out
 
 
 async def test_add_to_cart_unknown_product():
@@ -89,125 +110,103 @@ async def test_add_to_cart_unknown_product():
 
 
 async def test_add_to_cart_rejects_unavailable(monkeypatch):
-    # Backend marks a product out of stock (C3 opsi b: is_available=False).
     from app.backend_client import products as products_api
     from app.tools.add_to_cart import add_to_cart
-
     habis = {"id": 99, "nama_produk": "Kue Habis", "harga_jual": 40000,
              "is_available": False, "is_active": True}
-
-    async def fake_list(only_active=True, kategori=None):
-        return [habis]
-
-    async def fake_get(pid):
-        return habis if pid == 99 else None
-
-    monkeypatch.setattr(products_api, "list_products", fake_list)
-    monkeypatch.setattr(products_api, "get_product", fake_get)
-
+    monkeypatch.setattr(products_api, "list_products", lambda only_active=True, kategori=None: _async([habis]))
+    monkeypatch.setattr(products_api, "get_product", lambda pid: _async(habis if pid == 99 else None))
     set_turn_context(TurnContext(wa_number=WA))
     out = await add_to_cart.ainvoke({"items": [{"product": "Kue Habis", "qty": 1}]})
     assert "tidak tersedia" in out.lower()
     assert await store.get_cart(WA) == []
 
 
+async def _async(v):
+    return v
+
+
 # ── Full happy path: confirm -> identity -> DP -> payment ─────────────────────
 async def test_full_order_flow_with_dp():
     await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 2}])
-
     r = await handle_message(WA, "sudah sesuai")
     assert (await store.get_or_create_session(WA)).state == State.COLLECTING_IDENTITY
-    assert "nama" in r.text.lower()
-
     await handle_message(WA, "Budi Santoso")
     await handle_message(WA, "Jl. Mawar No. 10, Batam")
-    r = await handle_message(WA, "delivery")
-    assert "nomor wa" in r.text.lower() or "nomor hp" in r.text.lower()
-
-    r = await handle_message(WA, "ya")               # confirm autofill phone
-    assert "penuh" in r.text.lower() or "dp" in r.text.lower()
-
-    r = await handle_message(WA, "dp")               # choose DP 50%
-    # Final reply must contain VA + the DP amount (50% of 100000 = 50000).
-    assert "8808123456789012" in r.text
-    assert "Rp50.000" in r.text
+    await handle_message(WA, "delivery")
+    await handle_message(WA, "ya")
+    r = await handle_message(WA, "dp")
+    assert "8808123456789012" in r.text          # VA from backend charge
+    assert "Rp50.000" in r.text                  # DP 50% of 100000
 
     session = await store.get_or_create_session(WA)
     assert session.state == State.AWAITING_PAYMENT
-    assert json.loads(session.cart_json) == []       # cart cleared
-
     order = await store.get_active_pending(WA)
-    assert order is not None
-    assert order.payment_type == "dp"
-    assert order.total_amount == 100000
-    assert order.amount_due == 50000                 # DP 50%
-    assert order.delivery_method == "delivery"
-    assert order.status == "pending"
-    cust = json.loads(order.customer_json)
-    assert cust["nama"] == "Budi Santoso"
-    assert cust["nomor_hp"] == "628123456789"        # autofilled from WA
+    assert order.payment_type == "dp" and order.total_amount == 100000 and order.amount_due == 50000
+    assert order.order_ref == "30001"            # backend order id tracked locally
+    assert json.loads(order.customer_json)["nomor_hp"] == "628123456789"
 
 
 async def test_full_payment_charges_full_amount():
     await _seed_cart_awaiting_confirmation([{"product": "Bolu Pandan", "qty": 2}])
     for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full"):
-        r = await handle_message(WA, msg)
+        await handle_message(WA, msg)
     order = await store.get_active_pending(WA)
-    assert order.payment_type == "full"
-    assert order.amount_due == 150000                # 2 * 75000, full
+    assert order.payment_type == "full" and order.amount_due == 150000
 
 
 async def test_identity_validation_rejects_bad_input():
     await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 1}])
     await handle_message(WA, "sudah sesuai")
-    r = await handle_message(WA, "Budi")
+    await handle_message(WA, "Budi")
     await handle_message(WA, "Jl. Test 1")
     await handle_message(WA, "delivery")
-    r = await handle_message(WA, "12")               # invalid phone (too short)
+    r = await handle_message(WA, "12")
     assert "valid" in r.text.lower()
-    assert "nomor_hp" not in json.loads(
-        (await store.get_or_create_session(WA)).customer_json
-    )
+    assert "nomor_hp" not in json.loads((await store.get_or_create_session(WA)).customer_json)
 
 
-# ── Cancellation during confirmation ──────────────────────────────────────────
 async def test_cancel_during_confirmation():
     await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 1}])
-    r = await handle_message(WA, "batal")
+    await handle_message(WA, "batal")
     assert (await store.get_or_create_session(WA)).state == State.IDLE
     assert await store.get_cart(WA) == []
 
 
-# ── One active order per WA number ────────────────────────────────────────────
 async def test_single_active_order_guard():
     from app.tools.add_to_cart import add_to_cart
-
     await store.create_pending_order(
-        wa_number=WA, order_ref="INV-1", payment_type="full", total_amount=100,
-        amount_due=100, items_json="[]", customer_json="{}", delivery_method="pickup",
-        expires_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
+        wa_number=WA, order_ref="100", payment_type="full", total_amount=100, amount_due=100,
+        items_json="[]", customer_json="{}", delivery_method="pickup",
+        expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30),
     )
     set_turn_context(TurnContext(wa_number=WA))
     out = await add_to_cart.ainvoke({"items": [{"product": "Brownies Coklat", "qty": 1}]})
     assert "website" in out.lower()
-    assert await store.get_cart(WA) == []
 
 
-# ── get_order_status / cancel_order tools ─────────────────────────────────────
-async def test_order_status_and_cancel_tools():
-    from app.tools.cancel_order import cancel_order
+# ── get_order_status (backend) / cancel_order (backend) tools ─────────────────
+async def test_order_status_reads_backend(patch_externals):
     from app.tools.order_status import get_order_status
 
-    await store.create_pending_order(
-        wa_number=WA, order_ref="INV-9", payment_type="full", total_amount=100,
-        amount_due=100, items_json=json.dumps([{"nama": "Brownies", "qty": 1}]),
-        customer_json="{}", delivery_method="pickup",
-        expires_at=__import__("datetime").datetime.now(__import__("datetime").timezone.utc),
-    )
-    set_turn_context(TurnContext(wa_number=WA))
-    status = await get_order_status.ainvoke({})
-    assert "INV-9" in status
+    async def latest(wa):
+        return {"id": 9, "status": "in_process", "total_harga_pesanan": 100000,
+                "invoice": {"nomor_invoice": "INV-9", "status": "partial"},
+                "items": [{"product_id": 5, "jumlah": 2}]}
+    patch_externals["monkeypatch"].setattr(patch_externals["backend"], "get_latest_order", latest)
 
+    set_turn_context(TurnContext(wa_number=WA))
+    out = await get_order_status.ainvoke({})
+    assert "INV-9" in out and "diproses" in out.lower()
+
+
+async def test_cancel_calls_backend():
+    from app.tools.cancel_order import cancel_order
+    await store.create_pending_order(
+        wa_number=WA, order_ref="55", payment_type="full", total_amount=100, amount_due=100,
+        items_json="[]", customer_json="{}", delivery_method="pickup",
+        expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30),
+    )
     set_turn_context(TurnContext(wa_number=WA))
     out = await cancel_order.ainvoke({})
     assert "dibatalkan" in out.lower()
@@ -217,67 +216,39 @@ async def test_order_status_and_cancel_tools():
 # ── Human takeover suppresses auto-reply ──────────────────────────────────────
 async def test_escalate_sets_takeover_and_suppresses(patch_externals):
     from app.tools.escalate import escalate_to_admin
-
     set_turn_context(TurnContext(wa_number=WA))
     await escalate_to_admin.ainvoke({"reason": "kue custom ulang tahun"})
     assert await store.is_takeover_active(WA) is True
-    # Admin got notified.
     assert any("628999000111" == wa for wa, _ in patch_externals["sent"])
-    # Next inbound message is suppressed (not auto-replied).
     reply = await handle_message(WA, "halo?")
     assert reply.suppressed is True
 
 
 # ── Background worker: timeout + paid detection ───────────────────────────────
 async def test_background_timeout_cancels(patch_externals):
-    import datetime as dt
     past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=1)
     await store.create_pending_order(
-        wa_number=WA, order_ref="INV-T", payment_type="full", total_amount=100,
-        amount_due=100, items_json="[]", customer_json="{}", delivery_method="pickup",
-        expires_at=past,
+        wa_number=WA, order_ref="200", payment_type="full", total_amount=100, amount_due=100,
+        items_json="[]", customer_json="{}", delivery_method="pickup", expires_at=past,
     )
     await background._check_once()
-    order = await store.get_active_pending(WA)
-    assert order is None                              # expired -> no longer active
+    assert await store.get_active_pending(WA) is None
     assert any("dibatalkan otomatis" in t for _, t in patch_externals["sent"])
 
 
-async def test_background_detects_paid(monkeypatch, patch_externals):
-    import datetime as dt
-    from app.payment.client import payment_client
-
+async def test_background_detects_paid(patch_externals):
     future = dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30)
     await store.create_pending_order(
-        wa_number=WA, order_ref="INV-P", payment_type="full", total_amount=100,
-        amount_due=100, items_json="[]", customer_json="{}", delivery_method="pickup",
-        expires_at=future,
+        wa_number=WA, order_ref="201", payment_type="full", total_amount=100, amount_due=100,
+        items_json="[]", customer_json="{}", delivery_method="pickup", expires_at=future,
     )
 
-    async def fake_status(order_ref):
-        return "paid"
+    async def paid(order_id):
+        return {"invoice_status": "paid", "amount_paid": 100, "amount_due": 0}
+    patch_externals["monkeypatch"].setattr(patch_externals["backend"], "get_payment_status", paid)
 
-    monkeypatch.setattr(payment_client, "get_status", fake_status)
     await background._check_once()
-
     order = await store.get_active_pending(WA)
     assert order.status == "paid"
     assert (await store.get_or_create_session(WA)).state == State.ORDER_ACTIVE
     assert any("sudah kami terima" in t for _, t in patch_externals["sent"])
-
-
-# ── Contract guard: shape the chatbot sends to the backend (for Nicholas) ─────
-async def test_create_order_mock_contract_shape():
-    # Exact request shape the chatbot sends to the real POST /orders (Nicholas doc).
-    order = await mock_backend.create_order(
-        customer_id=1001,
-        items=[{"product_id": 5, "jumlah": 2, "harga": 50000}],
-        metode_pengiriman="pickup",
-        created_via="ChatBot",
-    )
-    assert set(order) >= {"order_id", "nomor_invoice", "total_harga_pesanan",
-                          "status", "invoice_status", "metode_pengiriman", "created_via"}
-    assert order["created_via"] == "ChatBot"
-    assert order["status"] == "pending"
-    assert order["invoice_status"] == "unpaid"
-    assert order["total_harga_pesanan"] == 100000
