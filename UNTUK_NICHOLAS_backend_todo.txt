@@ -19,9 +19,10 @@
                                 orders/{id}/ready saat status order jadi "ready"
      (pastikan env CHATBOT_URL di backend mengarah ke alamat Chatbot Service)
 
- SISA YANG BELUM (2 item):
+ SISA YANG BELUM (3 item):
    - C2: Endpoint daftar nomor admin penanganan takeover (dinamis via RBAC)
    - C3: Field is_available pada produk (dihitung dari resep vs stok)
+   - C5: Endpoint ubah status order (untuk memicu C4 push "ready" ke chatbot)
 
 
 ==============================================================================
@@ -73,6 +74,29 @@
 
 
 ==============================================================================
+ C5. ENDPOINT UBAH STATUS ORDER  (pemicu C4 push "ready")
+==============================================================================
+ Kamu SUDAH bikin order_service.update_order_status (yang sudah POST ke chatbot
+ saat status jadi "ready" — itu C4). Tapi belum ada route HTTP yang memanggilnya,
+ jadi status order tak bisa diubah & C4 tak pernah ke-trigger.
+
+ Yang dikerjakan:
+   - Endpoint (Depends(require_admin_or_owner), JWT — ini aksi Admin/Staff):
+       PATCH /orders/{order_id}/status
+         Request : { "status": "in_process" }   // pending|in_process|ready|delivered|picked_up
+         Response: OrderOut
+   - Di dalamnya panggil update_order_status(db, order_id, status). (Fungsi itu
+     yang otomatis push ke chatbot saat status="ready".)
+   - Pastikan env CHATBOT_URL di backend mengarah ke Chatbot Service
+     (mis. http://localhost:8000), bukan default localhost:8001.
+
+ Sisi chatbot: receiver POST /webhook/internal/orders/{id}/ready SUDAH ada &
+   teruji — begitu C5 jadi, chain "Admin set ready -> pelanggan dapat WA" jalan.
+ Selesai jika: PATCH status order jadi "ready" -> pelanggan otomatis dapat WA
+   "pesanan siap".
+
+
+==============================================================================
  CATATAN
  - Detail kontrak request/response endpoint yang SUDAH jadi (B1-B5, C1, C4) ada
    di MISSING_ENDPOINTS.md (sisi chatbot) — termasuk beberapa perbedaan kecil
@@ -80,5 +104,5 @@
      * status pakai GET /orders/latest?nomor_wa= (sudah benar)
      * POST /payments: payment_type = channel Midtrans (bank_transfer|qris),
        DP-vs-Final ditentukan dari amount.
- - Tidak ada lagi keputusan desain yang menggantung. Tinggal C2 + C3. 🙌
+ - Tidak ada lagi keputusan desain yang menggantung. Tinggal C2 + C3 + C5. 🙌
 ==============================================================================
