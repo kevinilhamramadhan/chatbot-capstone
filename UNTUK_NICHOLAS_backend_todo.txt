@@ -1,7 +1,7 @@
 ==============================================================================
  TO-DO BACKEND UNTUK NICHOLAS — dari Kevin (Chatbot/AI)
 ==============================================================================
- Mantap, hampir semua sudah jalan! 🎉 Tinggal 2 item kecil (C2 & C3).
+ Mantap, hampir semua sudah jalan! 🎉 Tinggal 3 item: C2, C3, C5.
  Semua endpoint chatbot WAJIB pakai Depends(require_service_key) (sudah ada).
 
  SUDAH DIBUAT (terverifikasi dari source — terima kasih!):
