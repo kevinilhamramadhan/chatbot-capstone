@@ -252,3 +252,15 @@ async def test_background_detects_paid(patch_externals):
     assert order.status == "paid"
     assert (await store.get_or_create_session(WA)).state == State.ORDER_ACTIVE
     assert any("sudah kami terima" in t for _, t in patch_externals["sent"])
+
+
+async def test_c4_ready_push_matches_by_order_ref(patch_externals):
+    """Backend pushes the BACKEND order id; notify_ready must match by order_ref."""
+    await store.create_pending_order(
+        wa_number=WA, order_ref="777", payment_type="full", total_amount=100, amount_due=100,
+        items_json="[]", customer_json="{}", delivery_method="delivery",
+        expires_at=dt.datetime.now(dt.timezone.utc) + dt.timedelta(minutes=30),
+    )
+    await store.update_pending_order((await store.get_active_pending(WA)).id, status="paid")
+    assert await background.notify_ready(777) is True          # backend order id
+    assert any("siap" in t.lower() for _, t in patch_externals["sent"])

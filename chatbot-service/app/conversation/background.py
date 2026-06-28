@@ -74,8 +74,9 @@ async def _check_once() -> None:
 
 async def notify_ready(order_id: int) -> bool:
     """Send the proactive 'order is ready' message (PROMPT §10.13)."""
+    # order_id from the backend push = our pending_orders.order_ref (backend id).
     orders = await store.list_orders_by_status("paid", "ready")
-    order = next((o for o in orders if o.id == order_id), None)
+    order = next((o for o in orders if o.order_ref == str(order_id)), None)
     if order is None:
         return False
     await store.update_pending_order(order.id, status="ready", notified_ready=True)
