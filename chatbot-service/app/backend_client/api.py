@@ -12,7 +12,9 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = 20.0
+_TIMEOUT = settings.backend_request_timeout_seconds
+# Order/payment creation goes through to Midtrans — give those calls headroom.
+_WRITE_TIMEOUT = max(30.0, _TIMEOUT)
 
 
 def _base() -> str:
@@ -55,7 +57,7 @@ async def create_order(customer_id: int, items: list[dict], metode_pengiriman: s
         "items": [{"product_id": i["product_id"], "jumlah": i.get("jumlah", i.get("qty"))}
                   for i in items],
     }
-    async with httpx.AsyncClient(timeout=30.0) as c:
+    async with httpx.AsyncClient(timeout=_WRITE_TIMEOUT) as c:
         r = await c.post(f"{_base()}/orders", json=payload, headers=_headers())
         r.raise_for_status()
         d = r.json()
@@ -66,7 +68,7 @@ async def create_order(customer_id: int, items: list[dict], metode_pengiriman: s
 
 async def create_payment(order_id, amount, channel: str = "bank_transfer") -> dict:
     """Charge via backend -> Midtrans. channel: 'bank_transfer' (VA) | 'qris'."""
-    async with httpx.AsyncClient(timeout=30.0) as c:
+    async with httpx.AsyncClient(timeout=_WRITE_TIMEOUT) as c:
         r = await c.post(f"{_base()}/payments",
                          json={"order_id": int(order_id), "payment_type": channel, "amount": float(amount)},
                          headers=_headers())

@@ -50,7 +50,9 @@ async def add_to_cart(items: list[dict]) -> str:
     for raw in items:
         name_q = str(raw.get("product") or raw.get("nama") or "").strip()
         try:
-            qty = max(1, int(raw.get("qty", 1)))
+            # ponytail: hard cap 100/item guards against LLM/typo garbage qty
+            # creating absurd real orders; raise if the store ever needs more.
+            qty = min(max(1, int(raw.get("qty", 1))), 100)
         except (TypeError, ValueError):
             qty = 1
         if not name_q:

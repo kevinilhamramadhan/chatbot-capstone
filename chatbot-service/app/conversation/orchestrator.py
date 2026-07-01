@@ -51,10 +51,8 @@ async def handle_message(wa_number: str, text: str) -> Reply:
         logger.info("Takeover active for %s — suppressing auto-reply", wa_number)
         return Reply(suppressed=True)
 
-    await store.get_or_create_session(wa_number)
-    await store.log_message(wa_number, "in", text)
-
     session = await store.get_or_create_session(wa_number)
+    await store.log_message(wa_number, "in", text)
     state = session.state
 
     if state == State.AWAITING_CART_CONFIRMATION:

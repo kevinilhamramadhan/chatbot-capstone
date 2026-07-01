@@ -14,27 +14,18 @@ services:
     environment:
       # Defaults so containers talk to each other; .env can override.
       WWEBJS_BASE_URL: http://wwebjs-api:3000
-      PAYMENT_GATEWAY_URL: http://payment-gateway:9000
     ports:
-      - "8000:8000"
+      # Bound to localhost: /webhook/* has no auth (wwebjs-api can't send an
+      # auth header), so it must not be reachable from the LAN. The backend's
+      # C4 ready-push runs on this host and still reaches 127.0.0.1:8000.
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./chatbot-service/chroma_db:/app/chroma_db      # persistent vector store
       - ./chatbot-service/toti_chatbot.db:/app/toti_chatbot.db
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
-      - payment-gateway
       - wwebjs-api
-    restart: unless-stopped
-
-  payment-gateway:
-    build: ./services/payment-gateway
-    container_name: toti-payment-mock
-    environment:
-      MOCK_EXPIRY_MINUTES: "30"
-      MOCK_AUTO_PAY_SECONDS: "0"   # 0 = use /debug/mark-paid manually
-    ports:
-      - "9000:9000"
     restart: unless-stopped
 
   wwebjs-api:
@@ -47,7 +38,7 @@ services:
       # We only need the `message` event; silence the rest to reduce noise.
       DISABLED_CALLBACKS: "message_create|message_revoke_everyone|message_reaction|media|group_join|group_leave|call"
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"   # only needed from this host (QR scan / debug)
     volumes:
       - ./whatsapp-gateway/sessions:/usr/src/app/sessions
     restart: unless-stopped

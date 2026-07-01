@@ -147,6 +147,31 @@ async def test_full_order_flow_with_dp():
     assert json.loads(order.customer_json)["nomor_hp"] == "628123456789"
 
 
+async def test_payment_failure_cancels_backend_order(patch_externals):
+    """If the Midtrans charge fails after the order was created, the backend
+    order must be cancelled (no orphaned pending orders piling up on retry)."""
+    cancelled = []
+
+    async def boom(order_id, amount, channel="bank_transfer"):
+        raise RuntimeError("midtrans down")
+
+    async def f_cancel(order_id):
+        cancelled.append(order_id)
+        return {"status": "success"}
+
+    mp, backend = patch_externals["monkeypatch"], patch_externals["backend"]
+    mp.setattr(backend, "create_payment", boom)
+    mp.setattr(backend, "cancel_order", f_cancel)
+
+    await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 1}])
+    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya"):
+        await handle_message(WA, msg)
+    r = await handle_message(WA, "full")
+    assert "gagal" in r.text.lower()
+    assert cancelled == [30001]                      # backend order cleaned up
+    assert await store.get_active_pending(WA) is None
+
+
 async def test_full_payment_charges_full_amount():
     await _seed_cart_awaiting_confirmation([{"product": "Bolu Pandan", "qty": 2}])
     for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full"):

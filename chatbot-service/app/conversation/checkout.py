@@ -61,6 +61,12 @@ async def finalize_order(wa_number: str) -> str:
         pay = await backend.create_payment(order_id, amount_due, channel="bank_transfer")
     except Exception as exc:  # noqa: BLE001
         logger.exception("payment charge failed: %s", exc)
+        # Cancel the just-created backend order so a retry doesn't stack
+        # duplicate pending orders in the backend DB. Best-effort.
+        try:
+            await backend.cancel_order(order_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("could not cancel orphaned order %s", order_id)
         return "Maaf, pembuatan tagihan gagal. Coba ulangi sebentar lagi ya 🙏"
 
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.payment_timeout_minutes)

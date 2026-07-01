@@ -5,6 +5,7 @@ back to the LLM for a second pass. With a small model (qwen3:1.7b) this keeps
 real data (prices, order summaries) accurate and avoids hallucinated rephrasing.
 """
 
+import asyncio
 import logging
 import re
 
@@ -33,8 +34,9 @@ def _clean(text: str | None) -> str:
 
 
 async def run_agent(wa_number: str, user_text: str, history: list[dict]) -> str:
-    # 1) Retrieval + scope guard (PROMPT §7).
-    retrieval = retrieve(user_text)
+    # 1) Retrieval + scope guard (PROMPT §7). retrieve() does blocking I/O
+    # (Ollama embed + Chroma query) — keep it off the event loop.
+    retrieval = await asyncio.to_thread(retrieve, user_text)
     rag_context = retrieval.context_text() if retrieval.in_scope else None
     logger.info(
         "RAG best_sim=%.3f in_scope=%s", retrieval.best_similarity, retrieval.in_scope

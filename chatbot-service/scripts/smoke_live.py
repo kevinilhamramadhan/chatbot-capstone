@@ -28,8 +28,8 @@ FAKE_PRODUCTS = [
 
 
 def _patch():
+    from app.backend_client import api as backend
     from app.backend_client import products as products_api
-    from app.payment.client import payment_client
     from app.whatsapp_client.client import whatsapp_client
 
     async def fake_list(only_active=True, kategori=None):
@@ -44,16 +44,24 @@ def _patch():
     async def fake_send_image(wa, url, caption=None):
         return {"ok": True}
 
-    async def fake_txn(order_id, amount, customer_name, customer_phone):
-        return {"transaction_id": "MID-SMOKE", "order_id": order_id, "amount": amount,
-                "bank": "bca", "va_number": "8808123456789012",
-                "qr_url": f"http://qr/{order_id}.png", "status": "pending"}
+    async def fake_upsert(wa, nama, alamat, phone):
+        return {"id": 1, "customer_id": 1, "nomor_wa": wa, "nama": nama}
+
+    async def fake_create_order(customer_id, items, metode_pengiriman, created_via="chatbot"):
+        return {"order_id": 90001, "nomor_invoice": "INV-SMOKE",
+                "total_harga_pesanan": 175000, "status": "pending"}
+
+    async def fake_create_payment(order_id, amount, channel="bank_transfer"):
+        return {"payment_id": 1, "pg_transaction_id": "MID-SMOKE",
+                "va_number": "8808123456789012", "qris_url": None, "status": "Pending"}
 
     products_api.list_products = fake_list
     products_api.get_product = fake_get
     whatsapp_client.send_text = fake_send_text
     whatsapp_client.send_image = fake_send_image
-    payment_client.create_transaction = fake_txn
+    backend.upsert_customer = fake_upsert
+    backend.create_order = fake_create_order
+    backend.create_payment = fake_create_payment
 
 
 async def main():

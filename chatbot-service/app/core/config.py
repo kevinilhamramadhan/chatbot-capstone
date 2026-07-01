@@ -56,8 +56,8 @@ class Settings(BaseSettings):
     # ── Local chatbot DB (SQLite) ─────────────────────────────────────────────
     database_url: str = "sqlite+aiosqlite:///./toti_chatbot.db"
 
-    # ── Payment gateway (mock Midtrans) ───────────────────────────────────────
-    payment_gateway_url: str = "http://payment-gateway:9000"
+    # ── Payment tracking ──────────────────────────────────────────────────────
+    # (Charging happens in the backend -> Midtrans; we only poll status here.)
     payment_check_interval_seconds: int = 30
     payment_timeout_minutes: int = 30
     # Decision: support full payment OR 50% down-payment (DP).

@@ -55,7 +55,10 @@ async def _process(sender: str, text: str) -> None:
 
 @router.post("/whatsapp")
 async def whatsapp_webhook(request: Request, bg: BackgroundTasks):
-    payload = await request.json()
+    try:
+        payload = await request.json()
+    except Exception:  # noqa: BLE001 - malformed body from the gateway
+        return {"status": "ignored"}
     extracted = _extract_message(payload)
     if extracted is None:
         return {"status": "ignored"}
