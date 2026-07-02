@@ -5,9 +5,11 @@ identity -> payment-type -> checkout), and delegates open-ended turns to the LLM
 agent. Returns a Reply; the caller is responsible for actually sending it.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 
+from app.backend_client import api as backend
 from app.conversation import checkout, store
 from app.conversation.context import OutboundMedia, TurnContext, set_turn_context
 from app.conversation.states import State, text_is_cancel, text_is_confirm
@@ -47,9 +49,14 @@ async def handle_message(wa_number: str, text: str) -> Reply:
 
     # 0) Human takeover: log inbound, do NOT auto-reply (PROMPT §12).
     if await store.is_takeover_active(wa_number):
-        await store.log_message(wa_number, "in", text, intent="takeover_suppressed")
-        logger.info("Takeover active for %s — suppressing auto-reply", wa_number)
-        return Reply(suppressed=True)
+        # Backend is the source of truth — Admin may have ended the takeover
+        # from the Admin Site, which the local cache can't see. Only checked
+        # while the local flag is on, so the common path stays backend-free.
+        if await _takeover_still_active(wa_number):
+            await store.log_message(wa_number, "in", text, intent="takeover_suppressed")
+            logger.info("Takeover active for %s — suppressing auto-reply", wa_number)
+            return Reply(suppressed=True)
+        await store.deactivate_takeover(wa_number)
 
     session = await store.get_or_create_session(wa_number)
     await store.log_message(wa_number, "in", text)
@@ -65,7 +72,22 @@ async def handle_message(wa_number: str, text: str) -> Reply:
 
     if reply.text:
         await store.log_message(wa_number, "out", reply.text)
+        # Mirror the turn into the backend's chatbot_conversations (ERD 3.20).
+        # Fire-and-forget: must never delay or fail the reply.
+        asyncio.get_running_loop().create_task(
+            backend.log_conversation(wa_number, str(session.id), text, reply.text)
+        )
     return reply
+
+
+async def _takeover_still_active(wa_number: str) -> bool:
+    try:
+        st = await backend.get_takeover_status(wa_number)
+    except Exception:  # noqa: BLE001 - backend unreachable -> trust local flag
+        return True
+    if st is None:  # customer unknown to backend -> no takeover there
+        return False
+    return bool(st.get("human_takeover_active")) and not st.get("is_expired")
 
 
 async def _run_agent_turn(wa_number: str, text: str) -> Reply:

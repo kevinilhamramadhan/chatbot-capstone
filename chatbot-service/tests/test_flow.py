@@ -75,10 +75,20 @@ def patch_externals(monkeypatch):
     async def f_admin():
         return []
 
+    async def f_takeover_status(wa):
+        # Mirror the local flag so suppress tests behave like a synced backend.
+        return {"nomor_wa": wa, "human_takeover_active": await store.is_takeover_active(wa),
+                "is_expired": False}
+
+    async def f_log_conversation(nomor_wa, session_id, message, response, intent=None):
+        return None
+
     for name, fn in {"upsert_customer": f_upsert, "create_order": f_create_order,
                      "create_payment": f_create_payment, "get_payment_status": f_payment_status,
                      "get_latest_order": f_latest, "cancel_order": f_cancel,
-                     "set_takeover": f_set_takeover, "get_takeover_admin_numbers": f_admin}.items():
+                     "set_takeover": f_set_takeover, "get_takeover_admin_numbers": f_admin,
+                     "get_takeover_status": f_takeover_status,
+                     "log_conversation": f_log_conversation}.items():
         monkeypatch.setattr(backend, name, fn)
     return {"sent": sent, "backend": backend, "monkeypatch": monkeypatch}
 
@@ -280,6 +290,48 @@ async def test_reports_unavailable_when_endpoint_missing(patch_externals):
     set_turn_context(TurnContext(wa_number="628777000222@c.us"))
     out = await financial_report.ainvoke({})
     assert "belum" in out.lower() and "dummy" not in out.lower()
+
+
+async def test_takeover_ended_on_admin_site_unsuppresses(patch_externals):
+    """Admin deactivates takeover via Admin Site (backend) — the chatbot's local
+    cache must yield to the backend and resume replying."""
+    await store.activate_takeover(WA)
+
+    async def backend_says_inactive(wa):
+        return {"nomor_wa": wa, "human_takeover_active": False, "is_expired": False}
+    patch_externals["monkeypatch"].setattr(
+        patch_externals["backend"], "get_takeover_status", backend_says_inactive)
+
+    from app.llm import agent as agent_mod
+    async def fake_agent(wa, text, history):
+        return "Halo! Ada yang bisa kubantu?"
+    patch_externals["monkeypatch"].setattr(
+        "app.conversation.orchestrator.run_agent", fake_agent)
+
+    reply = await handle_message(WA, "halo?")
+    assert reply.suppressed is False                     # bot talks again
+    assert await store.is_takeover_active(WA) is False   # local cache synced
+
+
+# ── Web chat endpoint (Buyer Site widget) ─────────────────────────────────────
+async def test_web_chat_endpoint(patch_externals, monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    from app.main import app
+
+    async def fake_agent(wa, text, history):
+        return "Ini balasan web"
+    monkeypatch.setattr("app.conversation.orchestrator.run_agent", fake_agent)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.post("/webhook/chat",
+                              json={"nomor_wa": "628111222333", "message": "halo"})
+        assert r.status_code == 200
+        assert r.json()["reply"] == "Ini balasan web"
+        # same session key as the WhatsApp channel
+        assert (await store.get_or_create_session("628111222333@c.us")).id
+        r2 = await client.post("/webhook/chat", json={"nomor_wa": "", "message": ""})
+        assert r2.status_code == 422
 
 
 # ── Background worker: timeout + paid detection ───────────────────────────────

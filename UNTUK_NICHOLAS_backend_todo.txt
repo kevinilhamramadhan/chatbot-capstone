@@ -2,8 +2,8 @@
  TO-DO BACKEND UNTUK NICHOLAS — dari Kevin (Chatbot/AI)
 ==============================================================================
  SEMUA endpoint chatbot (B1-B5, C1-C5) SUDAH JADI & LOLOS TES LIVE. 🎉🎉
- Tinggal: 1 ENDPOINT BARU (no. 4 — laporan Owner, GET /reports/summary)
- + beberapa perbaikan kecil (no. 1-3).
+ Tinggal: 2 ENDPOINT BARU (no. 4 laporan Owner + no. 5 log percakapan sesuai
+ ERD C300) + beberapa perbaikan kecil (no. 1-3).
 
  SUDAH DIBUAT & TERVERIFIKASI LIVE (Neon + Midtrans sandbox):
    - Fix double-prefix routing (path bersih /products/, /faq, /customers, /orders)
@@ -76,7 +76,30 @@
     Semua datanya sudah ada di tabelmu (payments, expenses, orders,
     order_items, products) — murni query agregat, tanpa tabel/model baru.
 
- 5. [NICE-TO-HAVE] Endpoint Owner untuk set handles_takeover
+ 5. [ENDPOINT BARU — SESUAI ERD C300 Tabel 3.20 chatbot_conversations]
+    Dokumen C300 menempatkan tabel chatbot_conversations di PostgreSQL
+    (kolom: id, customer_id FK->customers.id, session_id, message, response,
+    intent, created_at). Chatbot SUDAH mengirim tiap percakapan ke endpoint
+    ini (fire-and-forget) — selama belum ada, dia diam-diam skip.
+
+      POST /chatbot/conversations   (Depends(require_service_key))
+      Request:
+      {
+        "nomor_wa": "628123...@c.us",   // resolve ke customers.id;
+                                        // kalau customer belum ada, buat baris
+                                        // customer minimal (nomor_wa saja) —
+                                        // penanya FAQ belum tentu terdaftar
+        "session_id": "12",             // id sesi dari chatbot (string)
+        "message": "pesan pelanggan",
+        "response": "jawaban AI",
+        "intent": null                  // opsional VARCHAR(50)
+      }
+      Response 201: { "id": 123 }
+
+    (Kalau mau sekalian: GET /chatbot/conversations?nomor_wa= untuk
+    ditampilkan di Admin Site — opsional, chatbot tidak memakainya.)
+
+ 6. [NICE-TO-HAVE] Endpoint Owner untuk set handles_takeover
     Kolom users.handles_takeover sudah ada dan GET /admin/takeover-handlers
     sudah jalan. Tapi belum ada endpoint buat Owner mengubahnya dari Admin
     Site (sekarang harus lewat SQL manual):

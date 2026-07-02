@@ -1,7 +1,7 @@
 """Tool: add_to_cart — builds the local draft order and asks for confirmation.
 
-The draft cart is REAL (stored locally in the session). Finalizing to the backend
-is mocked at checkout time (PROMPT §9, §10.4).
+The draft cart lives locally in the session; checkout finalizes it into a real
+backend order + Midtrans charge (PROMPT §9, §10.4).
 """
 
 from langchain_core.tools import tool

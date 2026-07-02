@@ -1,4 +1,4 @@
-"""Tool: escalate_to_admin — human takeover (WA notify is REAL, storage is MOCK)."""
+"""Tool: escalate_to_admin — human takeover (backend C1 + WA notify, both real)."""
 
 import logging
 
@@ -29,8 +29,7 @@ async def escalate_to_admin(reason: str) -> str:
     except Exception as exc:  # noqa: BLE001 - local copy already set
         logger.warning("backend set_takeover failed: %s", exc)
 
-    # 2) Notify admin(s). C2 (dynamic handlers) not built yet -> [] -> fall back
-    # to the ADMIN_WA_NUMBER env var.
+    # 2) Notify admin(s): dynamic list from backend (C2), env fallback if empty.
     numbers = await backend.get_takeover_admin_numbers()
     if not numbers and settings.admin_wa_number:
         numbers = [settings.admin_wa_number]

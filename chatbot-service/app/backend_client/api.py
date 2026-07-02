@@ -101,6 +101,33 @@ async def cancel_order(order_id) -> dict:
         return r.json()
 
 
+async def get_takeover_status(wa_number: str) -> dict | None:
+    """C1 read: {nomor_wa, human_takeover_active, takeover_expires_at, is_expired}."""
+    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+        r = await c.get(f"{_base()}/customers/{wa_number}/takeover", headers=_headers())
+        if r.status_code == 404:
+            return None
+        r.raise_for_status()
+        return r.json()
+
+
+async def log_conversation(nomor_wa: str, session_id: str, message: str,
+                           response: str, intent: str | None = None) -> None:
+    """Mirror one turn into the backend's chatbot_conversations table (ERD 3.20).
+
+    Best-effort: while POST /chatbot/conversations isn't built (or backend is
+    down) this silently no-ops — the chatbot's local log remains the fallback.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            await c.post(f"{_base()}/chatbot/conversations",
+                         json={"nomor_wa": nomor_wa, "session_id": session_id,
+                               "message": message, "response": response, "intent": intent},
+                         headers=_headers())
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def set_takeover(wa_number: str, active: bool, expires_at: str | None) -> dict:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
         r = await c.post(f"{_base()}/customers/{wa_number}/takeover",

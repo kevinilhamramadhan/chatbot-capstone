@@ -14,7 +14,7 @@ class PendingOrder(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     wa_number: Mapped[str] = mapped_column(String(32), index=True)
 
-    # Order id from the backend (mocked for now) and the payment-gateway ref.
+    # Backend order id (as string) and the Midtrans transaction ref.
     order_ref: Mapped[str] = mapped_column(String(64), index=True)
     payment_ref: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
