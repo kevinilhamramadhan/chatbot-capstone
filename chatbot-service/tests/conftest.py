@@ -7,6 +7,7 @@ import tempfile
 _TMP_DB = os.path.join(tempfile.gettempdir(), "toti_test_chatbot.db")
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TMP_DB}")
 os.environ.setdefault("ADMIN_WA_NUMBER", "628999000111")
+os.environ.setdefault("BACKEND_SERVICE_API_KEY", "test-service-key")
 os.environ.setdefault("OWNER_WA_NUMBERS", "628777000222")
 os.environ.setdefault("AUTOFILL_PHONE_FROM_WA", "true")
 os.environ.setdefault("ALLOW_DOWN_PAYMENT", "true")

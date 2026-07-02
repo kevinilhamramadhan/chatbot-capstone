@@ -5,6 +5,7 @@ wwebjs-api posts events here (we configure BASE_WEBHOOK_URL to point at
 acknowledged and ignored.
 """
 
+import hmac
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -78,9 +79,15 @@ async def web_chat(request: Request):
     Body: {"nomor_wa": "628...", "message": "..."} — the Buyer Site knows the
     customer's WA number (buyers register via WhatsApp OTP). Same session,
     same tools, same flow as the WhatsApp channel.
+
+    Trust model: the caller is the team's Buyer Site backend (server-side),
+    authenticated by the shared X-Service-Key; it is responsible for only
+    passing the nomor_wa of its OTP-verified logged-in user.
     """
     key = settings.backend_service_api_key
-    if key and request.headers.get("X-Service-Key") != key:
+    if not key:  # fail closed: no key configured -> endpoint disabled
+        raise HTTPException(status_code=503, detail="web chat belum dikonfigurasi")
+    if not hmac.compare_digest(request.headers.get("X-Service-Key", ""), key):
         raise HTTPException(status_code=401, detail="invalid X-Service-Key")
     try:
         body = await request.json()
