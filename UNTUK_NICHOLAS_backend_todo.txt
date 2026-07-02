@@ -1,108 +1,67 @@
 ==============================================================================
  TO-DO BACKEND UNTUK NICHOLAS — dari Kevin (Chatbot/AI)
 ==============================================================================
- Mantap, hampir semua sudah jalan! 🎉 Tinggal 3 item: C2, C3, C5.
- Semua endpoint chatbot WAJIB pakai Depends(require_service_key) (sudah ada).
+ SEMUA endpoint chatbot (B1-B5, C1-C5) SUDAH JADI & LOLOS TES LIVE. 🎉🎉
+ Tinggal beberapa perbaikan kecil di bawah (bukan endpoint baru).
 
- SUDAH DIBUAT (terverifikasi dari source — terima kasih!):
+ SUDAH DIBUAT & TERVERIFIKASI LIVE (Neon + Midtrans sandbox):
    - Fix double-prefix routing (path bersih /products/, /faq, /customers, /orders)
    - image_url di ProductOut
    - require_service_key (X-Service-Key) + SERVICE_API_KEY
    - B1: Customers          -> GET /customers?nomor_wa= , POST /customers
-   - B2: Create order        -> POST /orders
+   - B2: Create order        -> POST /orders (cek stok resep + kurangi stok,
+                                optimistic locking — mantap!)
    - B3: Status pesanan      -> GET /orders/latest?nomor_wa=
    - B4: Cancel order        -> POST /orders/{order_id}/cancel
    - B5: Payment + Midtrans  -> POST /payments , GET /payments/{order_id}/status ,
                                 POST /payments/notify (charge Midtrans asli)
    - C1: Human takeover      -> POST & GET /customers/{nomor_wa}/takeover
-   - C4: Push "ready"        -> backend POST ke {CHATBOT_URL}/webhook/internal/
-                                orders/{id}/ready saat status order jadi "ready"
-     (pastikan env CHATBOT_URL di backend mengarah ke alamat Chatbot Service)
-
- SISA YANG BELUM (3 item):
-   - C2: Endpoint daftar nomor admin penanganan takeover (dinamis via RBAC)
-   - C3: Field is_available pada produk (dihitung dari resep vs stok)
-   - C5: Endpoint ubah status order (untuk memicu C4 push "ready" ke chatbot)
-
+   - C2: Takeover handlers   -> GET /admin/takeover-handlers  ✅ {"numbers":[...]}
+   - C3: is_available        -> di ProductOut (resep vs stok) + POST /orders
+                                menolak stok kurang (400)  ✅
+   - C4: Push "ready"        -> POST {CHATBOT_URL}/webhook/internal/orders/{id}/ready
+   - C5: Ubah status order   -> PATCH /orders/{order_id}/status (admin JWT)  ✅
+     * Chain C5->C4 SUDAH DITES LIVE: PATCH status "ready" -> chatbot terima
+       push -> pelanggan dinotif. Berfungsi! (order tes id=4)
 
 ==============================================================================
- C2. ENDPOINT DAFTAR NOMOR ADMIN PENANGAN TAKEOVER  (dinamis via RBAC)
+ PERBAIKAN KECIL YANG DITEMUKAN SAAT TES LIVE (bukan endpoint baru)
 ==============================================================================
- Owner menentukan (lewat Admin Site) admin mana yang menangani custom order &
- human takeover. Chatbot mengambil daftar nomornya dari sini (bukan env lagi).
 
- Yang dikerjakan:
-   1) app/models/user.py: tambah kolom  handles_takeover Boolean default False.
-   2) Endpoint untuk CHATBOT (Depends(require_service_key)):
-        GET /admin/takeover-handlers
-          Response 200: { "numbers": ["628111...", "628222..."] }
-          Isi: kolom nomor_wa_admin dari user (role admin/owner) yang is_active=true
-               DAN handles_takeover=true. Boleh >1 (broadcast).
-   3) Endpoint untuk OWNER (Depends(require_owner), JWT) untuk men-set kolom itu
-      dari Admin Site:
-        PATCH /users/{user_id}/takeover-handler
+ 1. [BUG] PATCH /orders/{id}/status balas 500 (padahal aksinya SUKSES)
+    Status di DB berubah & push C4 terkirim, tapi response-nya 500 karena
+    OrderOut.model_validate(order) lazy-load order_items/updated_at setelah
+    commit (MissingGreenlet, async SQLAlchemy).
+    Fix: di order_service.update_order_status, setelah commit re-query order
+    by id dengan options(selectinload(Order.order_items),
+    selectinload(Order.invoice)) sebelum return — sama polanya dengan yang
+    kamu pakai di get_customer_latest_order.
+
+ 2. [BUG] Cancel order tidak mengembalikan stok bahan
+    POST /orders sudah MENGURANGI stok bahan (bagus), tapi
+    POST /orders/{id}/cancel hanya set status cancelled — bahan yang sudah
+    dipotong tidak dikembalikan. Order batal/expired = stok bocor.
+    Fix: di cancel_order_by_customer, kembalikan stok per resep
+    (stok_tersedia += jumlah_dibutuhkan * jumlah item).
+
+ 3. [CONFIG] Set env CHATBOT_URL di backend
+    Default config chatbot_url = http://localhost:8001 (itu port backend
+    sendiri!). Supaya push C4 sampai, set di .env backend:
+        CHATBOT_URL=http://localhost:8000
+    (atau alamat Chatbot Service di deployment).
+
+ 4. [NICE-TO-HAVE] Endpoint Owner untuk set handles_takeover
+    Kolom users.handles_takeover sudah ada dan GET /admin/takeover-handlers
+    sudah jalan. Tapi belum ada endpoint buat Owner mengubahnya dari Admin
+    Site (sekarang harus lewat SQL manual):
+        PATCH /users/{user_id}/takeover-handler   (require_owner, JWT)
           Request : { "handles_takeover": true }
-          Response: { "user_id": 5, "handles_takeover": true }
-
- Sisi chatbot: sudah memanggil GET /admin/takeover-handlers (kini mock -> []),
-   notifikasi SEMUA nomor hasilnya, fallback ke ADMIN_WA_NUMBER bila kosong.
- Selesai jika: Owner set handles_takeover=true pada admin X (yang punya
-   nomor_wa_admin) -> GET /admin/takeover-handlers memuat nomor X.
-
-
-==============================================================================
- C3. FIELD is_available PADA PRODUK  (dipakai chatbot & saat create order)
-==============================================================================
- Definisi: produk "tersedia" jika SETIAP bahan pada resepnya (tabel recipes)
- punya stok cukup di stock_items untuk membuat 1 unit. Produk TANPA resep =
- tersedia (is_available=true). Dihitung on-the-fly (tanpa kolom stok di products).
-
- Yang dikerjakan:
-   1) app/services/product_service.py: fungsi is_available(product, db) -> bool
-      (cek tiap Recipe.qty_bahan <= stok tersedia di StockItem).
-   2) app/schemas/product.py: tambah field di ProductOut:
-         is_available: bool
-   3) Isi field tsb di response GET /products/ dan GET /products/{id}.
-   4) Di POST /orders: tolak item dengan is_available=false -> 400
-      { "detail": "product <id> out of stock" }.
-
- Sisi chatbot: sudah siap konsumsi ProductOut.is_available — get_menu menandai
-   item "(sedang tidak tersedia)", add_to_cart menolaknya. (Field absen ->
-   dianggap tersedia, aman.)
- Selesai jika: produk yang resepnya kurang bahan -> is_available=false di
-   GET /products/, dan POST /orders menolaknya (400).
-
-
-==============================================================================
- C5. ENDPOINT UBAH STATUS ORDER  (pemicu C4 push "ready")
-==============================================================================
- Kamu SUDAH bikin order_service.update_order_status (yang sudah POST ke chatbot
- saat status jadi "ready" — itu C4). Tapi belum ada route HTTP yang memanggilnya,
- jadi status order tak bisa diubah & C4 tak pernah ke-trigger.
-
- Yang dikerjakan:
-   - Endpoint (Depends(require_admin_or_owner), JWT — ini aksi Admin/Staff):
-       PATCH /orders/{order_id}/status
-         Request : { "status": "in_process" }   // pending|in_process|ready|delivered|picked_up
-         Response: OrderOut
-   - Di dalamnya panggil update_order_status(db, order_id, status). (Fungsi itu
-     yang otomatis push ke chatbot saat status="ready".)
-   - Pastikan env CHATBOT_URL di backend mengarah ke Chatbot Service
-     (mis. http://localhost:8000), bukan default localhost:8001.
-
- Sisi chatbot: receiver POST /webhook/internal/orders/{id}/ready SUDAH ada &
-   teruji — begitu C5 jadi, chain "Admin set ready -> pelanggan dapat WA" jalan.
- Selesai jika: PATCH status order jadi "ready" -> pelanggan otomatis dapat WA
-   "pesanan siap".
-
+    Ini urusan Admin Site, bukan chatbot — chatbot sudah jalan tanpa ini.
 
 ==============================================================================
  CATATAN
- - Detail kontrak request/response endpoint yang SUDAH jadi (B1-B5, C1, C4) ada
-   di MISSING_ENDPOINTS.md (sisi chatbot) — termasuk beberapa perbedaan kecil
-   yang akan disesuaikan Kevin di adapter chatbot (bukan tugasmu), mis.:
-     * status pakai GET /orders/latest?nomor_wa= (sudah benar)
-     * POST /payments: payment_type = channel Midtrans (bank_transfer|qris),
-       DP-vs-Final ditentukan dari amount.
- - Tidak ada lagi keputusan desain yang menggantung. Tinggal C2 + C3 + C5. 🙌
+ - Kontrak request/response lengkap ada di MISSING_ENDPOINTS.md (sisi chatbot).
+ - Chatbot sudah 100% pakai endpoint asli (tidak ada mock lagi, kecuali
+   laporan keuangan/analitik Owner yang memang belum ada endpoint-nya —
+   prioritas paling rendah, data dummy diberi label jelas).
 ==============================================================================

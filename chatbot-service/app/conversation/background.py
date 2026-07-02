@@ -81,6 +81,8 @@ async def notify_ready(order_id: int) -> bool:
     order = next((o for o in orders if o.order_ref == str(order_id)), None)
     if order is None:
         return False
+    if order.notified_ready:  # backend may re-push; don't spam the customer
+        return True
     await store.update_pending_order(order.id, status="ready", notified_ready=True)
 
     msg = f"Kabar baik! Pesananmu *{order.order_ref}* sudah *siap* 🎉\n"

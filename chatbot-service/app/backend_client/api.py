@@ -110,7 +110,7 @@ async def set_takeover(wa_number: str, active: bool, expires_at: str | None) -> 
 
 
 async def get_takeover_admin_numbers() -> list[str]:
-    # C2 (GET /admin/takeover-handlers) not built yet -> [] -> caller falls back to env.
+    # C2: GET /admin/takeover-handlers -> {"numbers": [...]}; [] -> caller falls back to env.
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
             r = await c.get(f"{_base()}/admin/takeover-handlers", headers=_headers())
