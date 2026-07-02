@@ -26,7 +26,7 @@
        push -> pelanggan dinotif. Berfungsi! (order tes id=4)
 
 ==============================================================================
- PERBAIKAN KECIL YANG DITEMUKAN SAAT TES LIVE (bukan endpoint baru)
+ YANG DIMINTA: 3 FIX KECIL (no. 1-3) + 1 ENDPOINT BARU (no. 4)
 ==============================================================================
 
  1. [BUG] PATCH /orders/{id}/status balas 500 (padahal aksinya SUKSES)
@@ -87,7 +87,11 @@
 ==============================================================================
  CATATAN
  - Kontrak request/response lengkap ada di MISSING_ENDPOINTS.md (sisi chatbot).
- - Chatbot sudah 100% pakai endpoint asli (tidak ada mock lagi, kecuali
-   laporan keuangan/analitik Owner yang memang belum ada endpoint-nya —
-   prioritas paling rendah, data dummy diberi label jelas).
+ - Chatbot 100% pakai endpoint asli — tidak ada mock/data dummy sama sekali.
+   Untuk laporan Owner (no. 4), selama endpoint-nya belum ada bot menjawab
+   jujur "laporan belum tersedia"; begitu kamu deploy, fitur langsung hidup
+   tanpa perubahan apa pun di sisi chatbot.
+ - Log percakapan sengaja disimpan lokal di Chatbot Service (bukan tabel
+   chatbot_conversations di Postgres) karena tidak ada fitur yang membacanya
+   dari pusat — jadi TIDAK perlu bikin endpoint/tabel itu.
 ==============================================================================
