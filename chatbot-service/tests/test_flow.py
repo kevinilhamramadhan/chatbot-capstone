@@ -313,36 +313,6 @@ async def test_takeover_ended_on_admin_site_unsuppresses(patch_externals):
     assert await store.is_takeover_active(WA) is False   # local cache synced
 
 
-# ── Web chat endpoint (Buyer Site widget) ─────────────────────────────────────
-async def test_web_chat_endpoint(patch_externals, monkeypatch):
-    from httpx import ASGITransport, AsyncClient
-    from app.main import app
-
-    async def fake_agent(wa, text, history):
-        return "Ini balasan web"
-    monkeypatch.setattr("app.conversation.orchestrator.run_agent", fake_agent)
-
-    transport = ASGITransport(app=app)
-    hdr = {"X-Service-Key": "test-service-key"}          # from conftest env
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        r = await client.post("/webhook/chat", headers=hdr,
-                              json={"nomor_wa": "628111222333", "message": "halo"})
-        assert r.status_code == 200
-        assert r.json()["reply"] == "Ini balasan web"
-        # same session key as the WhatsApp channel
-        assert (await store.get_or_create_session("628111222333@c.us")).id
-        r2 = await client.post("/webhook/chat", headers=hdr,
-                               json={"nomor_wa": "", "message": ""})
-        assert r2.status_code == 422
-        # wrong/missing key -> rejected (fail closed)
-        r3 = await client.post("/webhook/chat", headers={"X-Service-Key": "salah"},
-                               json={"nomor_wa": "628111222333", "message": "halo"})
-        assert r3.status_code == 401
-        r4 = await client.post("/webhook/chat",
-                               json={"nomor_wa": "628111222333", "message": "halo"})
-        assert r4.status_code == 401
-
-
 # ── Background worker: timeout + paid detection ───────────────────────────────
 async def test_background_timeout_cancels(patch_externals):
     past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=1)

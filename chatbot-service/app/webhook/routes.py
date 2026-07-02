@@ -5,17 +5,15 @@ wwebjs-api posts events here (we configure BASE_WEBHOOK_URL to point at
 acknowledged and ignored.
 """
 
-import hmac
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Request
 
 from app.backend_client import api as backend
 from app.conversation import background
 from app.conversation.orchestrator import handle_message
 from app.conversation.store import deactivate_takeover
-from app.core.config import settings
-from app.whatsapp_client.client import to_chat_id, whatsapp_client
+from app.whatsapp_client.client import whatsapp_client
 
 logger = logging.getLogger(__name__)
 
@@ -69,42 +67,6 @@ async def whatsapp_webhook(request: Request, bg: BackgroundTasks):
     # Ack fast; do the LLM work in the background so wwebjs-api doesn't time out.
     bg.add_task(_process, sender, text)
     return {"status": "accepted"}
-
-
-# ── Web chat (Buyer Site widget -> Chatbot Service; C300 komponen C6/C7) ──────
-@router.post("/chat")
-async def web_chat(request: Request):
-    """Chat endpoint for the Buyer Site floating chatbot.
-
-    Body: {"nomor_wa": "628...", "message": "..."} — the Buyer Site knows the
-    customer's WA number (buyers register via WhatsApp OTP). Same session,
-    same tools, same flow as the WhatsApp channel.
-
-    Trust model: the caller is the team's Buyer Site backend (server-side),
-    authenticated by the shared X-Service-Key; it is responsible for only
-    passing the nomor_wa of its OTP-verified logged-in user.
-    """
-    key = settings.backend_service_api_key
-    if not key:  # fail closed: no key configured -> endpoint disabled
-        raise HTTPException(status_code=503, detail="web chat belum dikonfigurasi")
-    if not hmac.compare_digest(request.headers.get("X-Service-Key", ""), key):
-        raise HTTPException(status_code=401, detail="invalid X-Service-Key")
-    try:
-        body = await request.json()
-    except Exception:  # noqa: BLE001
-        raise HTTPException(status_code=422, detail="body JSON tidak valid")
-    nomor_wa = str(body.get("nomor_wa") or "").strip()
-    message = str(body.get("message") or "").strip()
-    if not nomor_wa or not message:
-        raise HTTPException(status_code=422, detail="nomor_wa dan message wajib diisi")
-
-    reply = await handle_message(to_chat_id(nomor_wa), message)
-    return {
-        "reply": reply.text,
-        "media": [{"image_url": m.image_url, "caption": m.caption} for m in reply.media],
-        # true = human takeover active; the widget should show "admin will reply".
-        "suppressed": reply.suppressed,
-    }
 
 
 # ── Internal control endpoints (manual testing helpers) ───────────────────────

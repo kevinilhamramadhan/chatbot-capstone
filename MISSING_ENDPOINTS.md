@@ -71,9 +71,6 @@ Last synced against `Nicholl2/Backend-Cakery` @ commit `abd7241` (CORS Middlewar
 ---
 
 ## Chatbot-service endpoints exposed to the team (no backend action needed)
-- `POST /webhook/chat` — **Buyer Site web-chat widget** (C300 komponen C6/C7).
-  Body `{nomor_wa, message}` (+ `X-Service-Key` header) →
-  `{reply, media[], suppressed}`. Same session/tools/flow as WhatsApp.
 - `POST /webhook/internal/orders/{order_id}/ready` — receiver for C4 push (idempotent).
 - `POST /webhook/internal/takeover/{phone}/deactivate` — manual takeover reset.
   (Admin Site can also just set takeover inactive via the backend — the chatbot
