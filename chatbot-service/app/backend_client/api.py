@@ -109,6 +109,26 @@ async def set_takeover(wa_number: str, active: bool, expires_at: str | None) -> 
         return r.json()
 
 
+async def get_report_summary(start_date: str, end_date: str) -> dict | None:
+    """Owner reports (financial + analytics), one endpoint for both tools.
+
+    GET /reports/summary?start_date&end_date (X-Service-Key) ->
+      {revenue, expenses, order_count, avg_order_value, top_products[]}
+    Returns None while the endpoint isn't built / backend unreachable —
+    the tools then tell the Owner the report isn't available yet.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
+            r = await c.get(f"{_base()}/reports/summary",
+                            params={"start_date": start_date, "end_date": end_date},
+                            headers=_headers())
+            if r.status_code >= 400:
+                return None
+            return r.json()
+    except httpx.HTTPError:
+        return None
+
+
 async def get_takeover_admin_numbers() -> list[str]:
     # C2: GET /admin/takeover-handlers -> {"numbers": [...]}; [] -> caller falls back to env.
     try:

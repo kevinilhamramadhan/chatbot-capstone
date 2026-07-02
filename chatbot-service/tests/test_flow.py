@@ -249,6 +249,39 @@ async def test_escalate_sets_takeover_and_suppresses(patch_externals):
     assert reply.suppressed is True
 
 
+# ── Owner reports (real backend data; honest fallback while endpoint absent) ──
+async def test_reports_owner_gating_and_real_data(patch_externals):
+    from app.tools.reports import business_analytics, financial_report
+
+    async def summary(start, end):
+        return {"revenue": 500000, "expenses": 200000, "order_count": 3,
+                "avg_order_value": 166667,
+                "top_products": [{"nama_produk": "Brownies Coklat", "qty": 4, "revenue": 200000}]}
+    patch_externals["monkeypatch"].setattr(
+        patch_externals["backend"], "get_report_summary", summary)
+
+    set_turn_context(TurnContext(wa_number=WA))          # not an owner
+    assert "hanya untuk owner" in (await financial_report.ainvoke({})).lower()
+
+    set_turn_context(TurnContext(wa_number="628777000222@c.us"))  # OWNER_WA_NUMBERS
+    fin = await financial_report.ainvoke({})
+    assert "Rp500.000" in fin and "Rp300.000" in fin     # revenue & profit
+    ana = await business_analytics.ainvoke({})
+    assert "Brownies Coklat" in ana and "Rp166.667" in ana
+
+
+async def test_reports_unavailable_when_endpoint_missing(patch_externals):
+    from app.tools.reports import financial_report
+
+    async def none_summary(start, end):
+        return None
+    patch_externals["monkeypatch"].setattr(
+        patch_externals["backend"], "get_report_summary", none_summary)
+    set_turn_context(TurnContext(wa_number="628777000222@c.us"))
+    out = await financial_report.ainvoke({})
+    assert "belum" in out.lower() and "dummy" not in out.lower()
+
+
 # ── Background worker: timeout + paid detection ───────────────────────────────
 async def test_background_timeout_cancels(patch_externals):
     past = dt.datetime.now(dt.timezone.utc) - dt.timedelta(minutes=1)

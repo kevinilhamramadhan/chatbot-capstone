@@ -47,12 +47,14 @@ Last synced against `Nicholl2/Backend-Cakery` @ commit `abd7241` (CORS Middlewar
 
 ---
 
-## ❌ Still NOT built (chatbot mocks)
+## ❌ Still NOT built (chatbot ready & waiting)
 
-### Owner reports (low priority)
-- Expected: `GET /reports/financial`, `GET /reports/analytics` (Owner only).
-- Now: `financial_report` / `business_analytics` tools return **MOCK** dummy data
-  (clearly labeled, gated on `OWNER_WA_NUMBERS`).
+### Owner reports — `GET /reports/summary` (the ONE endpoint still awaited)
+- Contract: `GET /reports/summary?start_date&end_date` (service key) →
+  `{revenue, expenses, order_count, avg_order_value, top_products[]}`.
+- Chatbot side is **done**: `financial_report` / `business_analytics` call it for
+  real (no more dummy data); while it 404s they reply honestly that the report
+  isn't available yet. Ships in the backend → works with zero chatbot changes.
 
 ### Owner sets takeover handler (Admin Site concern, not chatbot)
 - `PATCH /users/{user_id}/takeover-handler` — column + read endpoint exist; the
