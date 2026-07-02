@@ -80,15 +80,11 @@ def patch_externals(monkeypatch):
         return {"nomor_wa": wa, "human_takeover_active": await store.is_takeover_active(wa),
                 "is_expired": False}
 
-    async def f_log_conversation(nomor_wa, session_id, message, response, intent=None):
-        return None
-
     for name, fn in {"upsert_customer": f_upsert, "create_order": f_create_order,
                      "create_payment": f_create_payment, "get_payment_status": f_payment_status,
                      "get_latest_order": f_latest, "cancel_order": f_cancel,
                      "set_takeover": f_set_takeover, "get_takeover_admin_numbers": f_admin,
-                     "get_takeover_status": f_takeover_status,
-                     "log_conversation": f_log_conversation}.items():
+                     "get_takeover_status": f_takeover_status}.items():
         monkeypatch.setattr(backend, name, fn)
     return {"sent": sent, "backend": backend, "monkeypatch": monkeypatch}
 

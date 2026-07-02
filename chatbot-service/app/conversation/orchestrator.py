@@ -5,7 +5,6 @@ identity -> payment-type -> checkout), and delegates open-ended turns to the LLM
 agent. Returns a Reply; the caller is responsible for actually sending it.
 """
 
-import asyncio
 import logging
 from dataclasses import dataclass, field
 
@@ -72,11 +71,6 @@ async def handle_message(wa_number: str, text: str) -> Reply:
 
     if reply.text:
         await store.log_message(wa_number, "out", reply.text)
-        # Mirror the turn into the backend's chatbot_conversations (ERD 3.20).
-        # Fire-and-forget: must never delay or fail the reply.
-        asyncio.get_running_loop().create_task(
-            backend.log_conversation(wa_number, str(session.id), text, reply.text)
-        )
     return reply
 
 
