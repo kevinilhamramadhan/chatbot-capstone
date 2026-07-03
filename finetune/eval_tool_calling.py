@@ -84,9 +84,12 @@ def main():
     llm = ChatOllama(
         base_url=settings.ollama_base_url,
         model=args.model,
-        temperature=0.0,  # deterministic-ish scoring
+        # Production sampling params (parity). NOTE: temperature 0/greedy makes
+        # small models loop forever — do not "make it deterministic".
+        temperature=settings.llm_temperature,
         top_p=settings.llm_top_p,
         num_ctx=args.num_ctx,
+        num_predict=768,  # hard cap: no runaway generations on CPU
     ).bind_tools(ALL_TOOLS)
 
     per_type = defaultdict(lambda: {"n": 0, "sel": 0, "param": 0, "irrelevant_ok": 0,
@@ -117,8 +120,8 @@ def main():
                 st["sel"] += 1
                 if canon_args(calls[0]["args"]) == canon_args(gargs):
                     st["param"] += 1
-        if (i + 1) % 20 == 0:
-            print(f"  {i + 1}/{len(rows)} rows ({time.time() - t0:.0f}s)")
+        if (i + 1) % 5 == 0:
+            print(f"  {i + 1}/{len(rows)} rows ({time.time() - t0:.0f}s)", flush=True)
 
     # aggregate
     tool_types = [t for t in per_type if t.startswith("T")]
