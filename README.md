@@ -19,15 +19,15 @@ wwebjs-api (Docker) ──webhook──▶ chatbot-service /webhook/whatsapp
               ┌────────────────────────┼─────────────────────────┐
               ▼                         ▼                          ▼
         rag/ (ChromaDB +          tools/ (LangChain          backend_client/
-        qwen3-embedding)          tool calling)              (real: products/faq;
-              │                         │                     mock: orders/customers)
-              ▼                         ▼
-        llm/ (Ollama qwen3:1.7b, tool calling)        payment/ ─▶ services/payment-gateway (MOCK)
+        qwen3-embedding)          tool calling)              (real HTTP -> backend:
+              │                         │                     products, orders,
+              ▼                         ▼                     customers, payments,
+        llm/ (Ollama, tool calling)                           takeover, reports)
 ```
 
-- **Real** today: `get_menu`, `get_product_detail`, `compare_products` (live backend
-  products), plus FAQ RAG. **Mocked** (endpoints not built yet): order create,
-  order status, customers, payments (mock Midtrans), human-takeover storage, reports.
+- **Everything is real**: products, orders, customers, payments (Midtrans via the
+  backend), human takeover, ready-push, and Owner reports all hit Nicholas's
+  backend (Neon PostgreSQL). No mocks remain.
 - The chatbot keeps its **own SQLite DB** (sessions, conversation log, pending orders).
 
 ## Prerequisites
@@ -35,13 +35,13 @@ wwebjs-api (Docker) ──webhook──▶ chatbot-service /webhook/whatsapp
 1. **Docker + Docker Compose**.
 2. **Ollama** running with the models pulled:
    ```bash
-   ollama pull qwen3:1.7b
+   ollama pull qwen3.5:0.8b        # LLM_MODEL in .env
    ollama pull qwen3-embedding:0.6b
    ```
    By default the chatbot reaches Ollama on the host via `host.docker.internal`.
-3. The **backend** (`Backend-Cakery`) running somewhere reachable, for the real
-   product/FAQ tools. Set `BACKEND_BASE_URL` to it. (The chatbot degrades gracefully
-   if it's down — product tools just return "menu sedang tidak bisa diambil".)
+3. The **backend** (`Backend-Cakery`) running somewhere reachable, for all real
+   data (products, orders, payments, reports). Set `BACKEND_BASE_URL` to it. (The
+   chatbot degrades gracefully if it's down — tools reply "sedang tidak bisa diambil".)
 
 ## Setup
 
@@ -50,8 +50,8 @@ cp .env.example .env          # then edit values (ADMIN_WA_NUMBER, BACKEND_BASE_
 docker compose up --build
 ```
 
-This starts: `chatbot-service` (:8000), `payment-gateway` mock (:9000),
-`wwebjs-api` (:3000). Chroma runs embedded inside chatbot-service.
+This starts: `chatbot-service` (:8000) and `wwebjs-api` (:3000), both bound to
+localhost. Chroma runs embedded inside chatbot-service.
 
 ### 1. Ingest the knowledge base (FAQ → ChromaDB)
 

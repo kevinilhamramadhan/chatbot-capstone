@@ -21,9 +21,6 @@ class ChatSession(Base):
     cart_json: Mapped[str] = mapped_column(Text, default="[]")
     customer_json: Mapped[str] = mapped_column(Text, default="{}")
 
-    # 'full' | 'dp' once the customer chooses at checkout.
-    payment_type: Mapped[str | None] = mapped_column(String(8), nullable=True)
-
     # Human takeover flag — while active the bot stops auto-replying.
     human_takeover_active: Mapped[bool] = mapped_column(Boolean, default=False)
     takeover_expires_at: Mapped[datetime | None] = mapped_column(

@@ -26,17 +26,6 @@ def _headers() -> dict:
     return {"X-Service-Key": k} if k else {}
 
 
-async def get_customer_by_wa(wa_number: str) -> dict | None:
-    async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
-        r = await c.get(f"{_base()}/customers", params={"nomor_wa": wa_number}, headers=_headers())
-        if r.status_code == 404:
-            return None
-        r.raise_for_status()
-        d = r.json()
-        d["customer_id"] = d.get("id")
-        return d
-
-
 async def upsert_customer(wa_number: str, nama: str, alamat: str, phone: str) -> dict:
     async with httpx.AsyncClient(timeout=_TIMEOUT) as c:
         r = await c.post(f"{_base()}/customers",

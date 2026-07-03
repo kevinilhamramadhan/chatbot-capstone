@@ -5,7 +5,6 @@ operational is hardcoded in business logic (see PROMPT rules #2 and #4).
 """
 
 from functools import lru_cache
-from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,10 +19,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # ── Backend (Nicholas's FastAPI) ──────────────────────────────────────────
-    # NOTE: do NOT hardcode paths. Backend has a double-prefix routing bug; paths
-    # are resolved/verified in backend_client against this base URL. See README.
     backend_base_url: str = "http://localhost:8001"
-    backend_verify_paths_via_openapi: bool = True
     backend_request_timeout_seconds: float = 10.0
     # Sent as X-Service-Key on every backend call. Must match the backend's
     # SERVICE_API_KEY (require_service_key dependency). Harmless on public GETs.

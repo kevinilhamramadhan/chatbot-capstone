@@ -28,21 +28,3 @@ KAPAN MEMANGGIL TOOL vs MENJAWAB LANGSUNG:
 
 Jangan mengarang harga, stok, atau status pesanan — selalu andalkan hasil tool.
 """
-
-
-def build_messages(
-    user_text: str,
-    rag_context: str | None,
-    history: list[dict],
-) -> list[dict]:
-    """Assemble chat messages: system + optional FAQ context + history + user."""
-    system = SYSTEM_PROMPT
-    if rag_context:
-        system += (
-            "\n\nKONTEKS FAQ (gunakan untuk menjawab pertanyaan umum di bawah):\n"
-            f"{rag_context}"
-        )
-    messages: list[dict] = [{"role": "system", "content": system}]
-    messages.extend(history)
-    messages.append({"role": "user", "content": user_text})
-    return messages

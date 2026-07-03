@@ -1,13 +1,7 @@
-"""HTTP client to Nicholas's FastAPI backend.
+"""HTTP client to Nicholas's backend for public product/FAQ reads.
 
-Two defensive measures baked in (PROMPT rule #2):
-
-1. We never hardcode a single raw path. The backend currently has a
-   double-prefix routing bug (e.g. the products list lives at
-   `/products/products/`, not `/products/`). Each call passes a list of
-   *candidate* paths — clean first, doubled as fallback — and we cache whichever
-   one actually responds, so this keeps working once the bug is fixed.
-2. The base URL is config-driven (`BACKEND_BASE_URL`).
+Base URL comes from config (BACKEND_BASE_URL). The backend's old double-prefix
+routing bug is fixed upstream, so paths here are the clean, real ones.
 """
 
 import logging
@@ -29,38 +23,20 @@ class BackendClient:
             if settings.backend_service_api_key
             else {}
         )
-        # Cache: candidate-tuple -> resolved working path.
-        self._resolved: dict[tuple[str, ...], str] = {}
 
-    async def get_first_ok(
-        self, candidates: list[str], params: dict | None = None
-    ) -> httpx.Response | None:
-        """Try candidate paths in order; return the first non-404 response.
-
-        Returns None if every candidate 404s or the backend is unreachable.
-        """
-        key = tuple(candidates)
-        if key in self._resolved:
-            candidates = [self._resolved[key]]
-
-        async with httpx.AsyncClient(timeout=self._timeout, headers=self._headers) as client:
-            last_exc: Exception | None = None
-            for path in candidates:
-                url = f"{self._base}{path}"
-                try:
-                    resp = await client.get(url, params=params)
-                except httpx.HTTPError as exc:  # connection/timeout
-                    last_exc = exc
-                    logger.warning("Backend unreachable at %s: %s", url, exc)
-                    continue
-                if resp.status_code == 404:
-                    logger.debug("Backend 404 at %s, trying next candidate", url)
-                    continue
-                self._resolved[key] = path
-                return resp
-            if last_exc:
-                logger.error("Backend request failed for all candidates: %s", candidates)
+    async def get(self, path: str, params: dict | None = None) -> httpx.Response | None:
+        """GET a backend path; None when unreachable or the response is >= 400."""
+        url = f"{self._base}{path}"
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout, headers=self._headers) as client:
+                resp = await client.get(url, params=params)
+        except httpx.HTTPError as exc:  # connection/timeout
+            logger.warning("Backend unreachable at %s: %s", url, exc)
             return None
+        if resp.status_code >= 400:
+            logger.warning("Backend %s at %s", resp.status_code, url)
+            return None
+        return resp
 
 
 backend_client = BackendClient()
