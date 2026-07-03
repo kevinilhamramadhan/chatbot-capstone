@@ -120,12 +120,22 @@
       balas angka yang cocok dengan isi DB. (Chatbot memanggil dengan rentang
       bulan berjalan.)
 
- 5. [NICE-TO-HAVE — bukan blocker chatbot]
-    Endpoint Owner untuk set handles_takeover dari Admin Site (sekarang
-    kolomnya cuma bisa diubah lewat SQL manual):
+ 5. [UNTUK ADMIN SITE] Endpoint Owner mengatur penerima notifikasi takeover
+    Buat apa: saat pelanggan minta kue custom, chatbot mengirim notifikasi WA
+    ke semua admin yang kolom users.handles_takeover-nya true (dibaca lewat
+    GET /admin/takeover-handlers — sudah jalan). Masalahnya: BELUM ADA cara
+    mengubah flag itu selain SQL manual ke database. Padahal skenario nyatanya:
+    ganti admin jaga -> Owner harusnya tinggal klik toggle di Admin Site.
+
         PATCH /users/{user_id}/takeover-handler   (require_owner, JWT)
           Request : { "handles_takeover": true }
-    Ini kebutuhan Admin Site; chatbot sudah jalan tanpa ini (fallback env).
+          Response: { "user_id": 5, "handles_takeover": true }
+
+    Catatan: chatbot TIDAK terblokir oleh ini — dia cuma membaca daftarnya
+    (plus fallback ADMIN_WA_NUMBER kalau kosong). Endpoint ini pasangannya
+    tombol di Admin Site (koordinasi dengan Ainaya untuk UI-nya).
+    SELESAI JIKA: Owner toggle admin X dari Admin Site -> nomor X muncul/
+    hilang di GET /admin/takeover-handlers tanpa sentuh SQL.
 
 ==============================================================================
  CATATAN
