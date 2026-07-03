@@ -28,7 +28,7 @@ The same doubling applies to every other router (auth, pricing, recipes, purchas
 ### Backend endpoints: real vs. not-yet-built
 
 - **Usable now** (buyer-relevant): products list/detail, FAQ list/detail, stock-items. `get_menu` / `get_product_detail` tools wire to these — `get_menu` is the one tool whose backend endpoint definitely exists, so it's the end-to-end smoke test (spec §15.6).
-- **Not built yet** — orders, payments, customers, order status, human-takeover storage, financial reports. Do **not** invent these endpoints or fake responses. The only one still pending is the Owner reports endpoint (`GET /reports/summary`) — the chatbot calls it for real and answers "belum tersedia" until it ships. Anything new the backend must build goes in `UNTUK_NICHOLAS_backend_todo.txt` (name, method+path, request/response shape, why). See spec §1, §5.
+- **All backend endpoints the chatbot needs are built and live-verified** (backend commit `8670242`): customers, orders, payments/Midtrans, takeover, takeover-handlers, `is_available`, ready-push, order-status update, and `GET /reports/summary` (Owner reports — wired into `financial_report`/`business_analytics` for real). Do **not** invent endpoints beyond these; anything new the backend must build goes in `UNTUK_NICHOLAS_backend_todo.txt` (name, method+path, request/response shape, why), which also lists the frozen response contracts the chatbot depends on. See spec §1, §5.
 
 Product/FAQ response shapes live in `Backend-Cakery/app/schemas/product.py` and `faq.py` (note Indonesian field names: `nama_produk`, `harga_jual`, `deskripsi`, `kategori`, `pertanyaan`, `jawaban`).
 
