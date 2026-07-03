@@ -7,7 +7,7 @@ gateway. This repo is **only** the chatbot + WhatsApp integration — the main b
 
 > Scope, rules, and the full conversation flow live in
 > `PROMPT_CLAUDE_CODE_TOTI_CAKERY_CHATBOT.md`. Endpoints the backend still owes us
-> are in `MISSING_ENDPOINTS.md`. See `CLAUDE.md` for an orientation aimed at AI agents.
+> are in `UNTUK_NICHOLAS_backend_todo.txt`. See `CLAUDE.md` for an orientation aimed at AI agents.
 
 ## Architecture
 

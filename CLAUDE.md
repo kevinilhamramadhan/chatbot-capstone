@@ -23,12 +23,12 @@ Every router in `Backend-Cakery` declares its own `prefix=` *and* is re-included
 | FAQ | `/faq` | `/faq` | `/faq/faq` |
 | Stock items | `/stock-items` | `/stock` | `/stock/stock-items/` |
 
-The same doubling applies to every other router (auth, pricing, recipes, purchasing). **Do not hardcode raw paths read from the source.** Per spec §1.2: keep the base URL in config (`BACKEND_BASE_URL`) and verify real paths against the running backend's `/docs` or `/openapi.json` before relying on them; otherwise assume the clean (un-doubled) path and record the assumption in `MISSING_ENDPOINTS.md`.
+The same doubling applies to every other router (auth, pricing, recipes, purchasing). **Do not hardcode raw paths read from the source.** Per spec §1.2: keep the base URL in config (`BACKEND_BASE_URL`) and verify real paths against the running backend's `/docs` or `/openapi.json` before relying on them; otherwise assume the clean (un-doubled) path and note the assumption in `UNTUK_NICHOLAS_backend_todo.txt`.
 
 ### Backend endpoints: real vs. not-yet-built
 
 - **Usable now** (buyer-relevant): products list/detail, FAQ list/detail, stock-items. `get_menu` / `get_product_detail` tools wire to these — `get_menu` is the one tool whose backend endpoint definitely exists, so it's the end-to-end smoke test (spec §15.6).
-- **Not built yet** — orders, payments, customers, order status, human-takeover storage, financial reports. Do **not** invent these endpoints or fake responses. Implement them as clearly-marked mocks (`# MOCK — endpoint backend belum tersedia`) returning realistic dummy data, and log each one in `MISSING_ENDPOINTS.md` (name, assumed method+path, request/response shape, why). See spec §1, §5.
+- **Not built yet** — orders, payments, customers, order status, human-takeover storage, financial reports. Do **not** invent these endpoints or fake responses. The only one still pending is the Owner reports endpoint (`GET /reports/summary`) — the chatbot calls it for real and answers "belum tersedia" until it ships. Anything new the backend must build goes in `UNTUK_NICHOLAS_backend_todo.txt` (name, method+path, request/response shape, why). See spec §1, §5.
 
 Product/FAQ response shapes live in `Backend-Cakery/app/schemas/product.py` and `faq.py` (note Indonesian field names: `nama_produk`, `harga_jual`, `deskripsi`, `kategori`, `pertanyaan`, `jawaban`).
 
