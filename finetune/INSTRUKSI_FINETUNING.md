@@ -36,6 +36,14 @@ adversarial N6 ("cara batalin gimana?" ≠ cancel_order).
 
 ## 2. Setup training (Unsloth, Colab T4 cukup)
 
+- **Template resmi Unsloth tersedia di repo: `finetune/Qwen3_5_(0_8B)_Vision.ipynb`**
+  (diunduh dari unslothai/notebooks — satu-satunya varian resmi utk 0.8B; Qwen3.5
+  multimodal, tapi fine-tuning kita text-only). **Tulis kode DARI notebook ini**,
+  jangan dari ingatan: pakai cell instalasi, loading model, `get_peft_model`,
+  `SFTTrainer`/`SFTConfig`, dan cell export-nya apa adanya; hanya bagian *data
+  prep* yang diganti dengan cell konversi dataset kita (README §Colab). Karena
+  data kita text-only, muat model lewat jalur teks (`FastLanguageModel` — di
+  notebook tertulis sebagai komentar pada import `FastVisionModel`).
 - Base model: varian instruct Qwen3.5 0.8B dari Unsloth (yang setara dengan
   `qwen3.5:0.8b` di Ollama). `load_in_4bit=True` boleh; model kecil, T4 longgar.
 - `max_seq_length = 4096` (prompt terpanjang ±3k token: system+tools+history).
