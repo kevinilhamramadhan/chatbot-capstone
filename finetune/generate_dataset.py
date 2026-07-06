@@ -570,12 +570,18 @@ N6_REPLY = {
 }
 
 # ── Composition tables ───────────────────────────────────────────────────────
-TRAIN_COUNTS = {"T1": 70, "T2": 30, "T3": 70, "T4": 40, "T5": 60, "T6": 35, "T7": 35,
-                "T8": 50, "T9": 30, "T10": 35, "T11": 12, "T12": 13,
-                "N1": 90, "N2": 25, "N3": 50, "N4": 60, "N5": 50, "N6": 45}
-VAL_COUNTS = {"T1": 7, "T2": 3, "T3": 7, "T4": 4, "T5": 6, "T6": 4, "T7": 3,
-              "T8": 5, "T9": 3, "T10": 4, "T11": 1, "T12": 1,
-              "N1": 9, "N2": 3, "N3": 5, "N4": 6, "N5": 5, "N6": 4}
+# v2 (2026-07-05): N5/N6/T10 diperbanyak — verdict harness v1 (toti-qwen-1.7b
+# 4/5 target) menunjukkan regresi terlokalisir di N5 ambigu (2/7), N6 jebakan
+# (3/5), dan T10 escalate (2/4). Split TEST DIBEKUKAN dari v1 (lihat main()).
+# v3 (2026-07-06): T5 60->90 (single-item add_to_cart when flavour IS given ->
+# add directly, don't over-clarify), T11 12->30 & T12 13->30 (owner reports were
+# 0/3 in the v2 wired eval — thin slice under-taught). Test split stays frozen.
+TRAIN_COUNTS = {"T1": 70, "T2": 30, "T3": 70, "T4": 40, "T5": 90, "T6": 35, "T7": 35,
+                "T8": 50, "T9": 30, "T10": 60, "T11": 30, "T12": 30,
+                "N1": 90, "N2": 25, "N3": 50, "N4": 60, "N5": 110, "N6": 80}
+VAL_COUNTS = {"T1": 7, "T2": 3, "T3": 7, "T4": 4, "T5": 9, "T6": 4, "T7": 3,
+              "T8": 5, "T9": 3, "T10": 6, "T11": 3, "T12": 3,
+              "N1": 9, "N2": 3, "N3": 5, "N4": 6, "N5": 11, "N6": 8}
 TEST_COUNTS = {"T1": 9, "T2": 4, "T3": 9, "T4": 5, "T5": 7, "T6": 4, "T7": 4,
                "T8": 6, "T9": 4, "T10": 4, "T11": 2, "T12": 2,
                "N1": 11, "N2": 3, "N3": 6, "N4": 8, "N5": 7, "N6": 5}
@@ -586,7 +592,7 @@ MT_SHARE = {"T1": .2, "T2": .2, "T3": .3, "T4": .25, "T5": .2, "T6": .2, "T7": 1
             "T8": .3, "T9": .4, "T10": .3, "T11": .1, "T12": .1,
             "N1": .3, "N2": .2, "N3": .3, "N4": .25, "N5": .3, "N6": .4}
 
-assert sum(TRAIN_COUNTS.values()) == 800 and sum(VAL_COUNTS.values()) == 80
+assert sum(TRAIN_COUNTS.values()) == 985 and sum(VAL_COUNTS.values()) == 99
 assert sum(TEST_COUNTS.values()) == 100
 
 
@@ -1232,16 +1238,38 @@ def stats(rows_by_split):
 
 def main():
     g = Gen()
+
+    # Split test DIBEKUKAN dari v1: hasil eval (baseline & v1) hanya sebanding
+    # kalau test byte-identik. RNG generator tunggal, jadi test TIDAK digenerate
+    # ulang; teks user-nya diregistrasikan agar train/val v2 tetap bebas overlap.
+    frozen_path = OUT_DIR / "test.jsonl"
+    frozen_test = None
+    if frozen_path.exists():
+        frozen_test = [json.loads(l) for l in frozen_path.open(encoding="utf-8")]
+        for row in frozen_test:
+            for m in row["messages"]:
+                if m["role"] == "user":
+                    g._register_text(m["content"], "test")
+        print(f"test split dibekukan dari file lama ({len(frozen_test)} rows)")
+
     order = list(TRAIN_COUNTS)
-    for split, counts in (("train", TRAIN_COUNTS), ("validation", VAL_COUNTS), ("test", TEST_COUNTS)):
+    split_plan = [("train", TRAIN_COUNTS), ("validation", VAL_COUNTS)]
+    if frozen_test is None:
+        split_plan.append(("test", TEST_COUNTS))
+    for split, counts in split_plan:
         for rtype in order:
             g.gen_type(rtype, split, counts[rtype])
         g.rng.shuffle(g.rows[split])
+    if frozen_test is not None:
+        g.rows["test"] = frozen_test
 
     self_check(g.rows)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for split, rows in g.rows.items():
+        if split == "test" and frozen_test is not None:
+            print(f"skip tulis {OUT_DIR / 'test.jsonl'} (dibekukan, {len(rows)} rows)")
+            continue
         path = OUT_DIR / f"{split}.jsonl"
         with path.open("w", encoding="utf-8") as f:
             for row in rows:

@@ -72,16 +72,23 @@ Key properties:
 
 | Split | Rows | Purpose |
 |---|---|---|
-| `train` | 800 | weight updates |
-| `validation` | 80 | same distribution as train (iid) — pass as `eval_dataset` to monitor val-loss / early stopping |
-| `test` | 100 | **held-out**: ~15% of phrasing templates, 2 products (`Cake 22cm`, `Giant Cookies 15cm`), 1 flavour (`Matcha`), and 2 FAQ docs appear ONLY here. Used by the functional eval harness, never during training |
+| `train` | 985 | weight updates |
+| `validation` | 99 | same distribution as train (iid) — pass as `eval_dataset` to monitor val-loss / early stopping |
+| `test` | 100 | **held-out & FROZEN since v1**: ~15% of phrasing templates, 2 products (`Cake 22cm`, `Giant Cookies 15cm`), 1 flavour (`Matcha`), and 2 FAQ docs appear ONLY here. Used by the functional eval harness, never during training |
 
-Composition (train): T1-T12 tool types 480 rows (add_to_cart family 130,
-get_menu 100, detail 70, compare 40, status 50, cancel 30, escalate 35, owner
-reports 25); non-tool 320 rows (FAQ-grounded 90, greetings 50, out-of-scope 60,
-clarify 50, adversarial 45, no-info fallback 25). Validation/test keep the same
-proportions. Zero verbatim (even punctuation-normalized) user-message overlap
-across splits.
+Composition (train, **v3**): T1-T12 tool types 570 rows (add_to_cart family 160,
+get_menu 100, detail 70, compare 40, status 50, cancel 30, escalate 60, owner
+reports 60); non-tool 415 rows (FAQ-grounded 90, greetings 50, out-of-scope 60,
+clarify 110, adversarial 80, no-info fallback 25). Validation keeps the same
+proportions. Zero verbatim (even punctuation-normalized) **final user-message**
+overlap across splits.
+
+**v3 (2026-07-06)**: single-item add_to_cart T5 60→90 (add directly when the
+flavour is given, instead of over-clarifying), owner reports T11 12→30 & T12
+13→30 (both were 0/3 in the v2 wired eval — too thin to learn). **v2 (2026-07-05)**:
+clarify N5 50→110, adversarial N6 45→80, escalate T10 35→60 (v1 models were
+trigger-happy on ambiguous requests — fixed: false_tool 0.20→0.025). The `test`
+split is byte-identical to v1 across all versions, so every eval stays comparable.
 
 ## Using with the Unsloth Colab (Qwen3.5 0.8B)
 
@@ -89,7 +96,7 @@ across splits.
 from datasets import load_dataset
 import json
 
-ds = load_dataset("KEVIN_HF_USERNAME/toti-cakery-toolcall")  # 3 splits
+ds = load_dataset("LasagnaS/toti-cakery-toolcall")  # 3 splits
 
 def to_text(ex):
     msgs = ex["messages"]

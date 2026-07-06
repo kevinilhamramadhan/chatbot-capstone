@@ -24,9 +24,10 @@ adversarial N6 ("cara batalin gimana?" ≠ cancel_order).
 
 ## 1. Dataset
 
-- HuggingFace: `KEVIN_HF_USERNAME/toti-cakery-toolcall` (atau lokal `finetune/data/`).
-- 3 split: `train` 800 / `validation` 80 (iid, untuk val-loss) / `test` 100
-  (held-out, HANYA untuk harness — jangan pernah masuk training/val).
+- HuggingFace: `LasagnaS/toti-cakery-toolcall` (sudah di-upload; atau lokal `finetune/data/`).
+- 3 split (v3): `train` 985 / `validation` 99 (iid, untuk val-loss) / `test` 100
+  (held-out, DIBEKUKAN sejak v1, HANYA untuk harness — jangan pernah masuk
+  training/val).
 - Format per baris: `messages` (system+history+user+final assistant),
   `tools_json` (string berisi 9 skema tool), `meta` (abaikan saat training).
 - **PENTING**: `tool_calls[].function.arguments` disimpan sebagai **JSON string**
