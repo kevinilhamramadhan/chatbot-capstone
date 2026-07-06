@@ -31,3 +31,10 @@ Dokumen capstone/
 
 # Local Claude Code settings
 .claude/
+
+# Fine-tune model binaries — live on HuggingFace (LasagnaS/toti-qwen-gguf), not git
+*.gguf
+*.gguf.v1
+finetune/gguf_dl/
+# transient local backups
+*.v1.json

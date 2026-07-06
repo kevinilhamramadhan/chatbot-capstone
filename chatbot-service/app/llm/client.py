@@ -18,4 +18,5 @@ def get_llm():
         temperature=settings.llm_temperature,
         top_p=settings.llm_top_p,
         num_ctx=settings.llm_num_ctx,
+        num_predict=settings.llm_num_predict,  # cap runaway generations (CPU latency tail)
     )

@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.7
     llm_top_p: float = 0.8
     llm_num_ctx: int = 32768
+    # Hard cap on generated tokens per reply. Without it, Ollama defaults to
+    # unlimited and a small model that fails to stop cleanly can generate for
+    # 100s+ on CPU (observed on 1.7b). 768 fits a thinking trace + a WA reply.
+    llm_num_predict: int = 768
 
     # ── RAG / ChromaDB ────────────────────────────────────────────────────────
     chroma_persist_dir: str = "./chroma_db"
