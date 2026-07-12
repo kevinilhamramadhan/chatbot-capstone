@@ -184,13 +184,32 @@ async def _handle_identity(wa_number: str, text: str) -> Reply:
         else:
             return Reply(text=_payment_type_prompt())
         await store.set_customer(wa_number, cust)
-        # All set -> finalize.
+        return Reply(text=_channel_prompt())
+
+    # Step 6: payment channel (VA vs QRIS) -> finalize.
+    if "channel" not in cust:
+        low = text.lower()
+        if "qris" in low or "qr" in low:
+            cust["channel"] = "qris"
+        elif "va" in low or "transfer" in low or "bank" in low:
+            cust["channel"] = "bank_transfer"
+        else:
+            return Reply(text=_channel_prompt())
+        await store.set_customer(wa_number, cust)
         reply_text = await checkout.finalize_order(wa_number)
         return Reply(text=reply_text)
 
     # Shouldn't reach here; reset to be safe.
     await store.set_state(wa_number, State.IDLE)
     return Reply(text="Ada lagi yang bisa kubantu? 😊")
+
+
+def _channel_prompt() -> str:
+    return (
+        "Metode pembayarannya mau lewat apa?\n"
+        "• Ketik *VA* — transfer bank via Virtual Account\n"
+        "• Ketik *QRIS* — scan kode QR (GoPay/OVO/Dana/mobile banking)"
+    )
 
 
 def _payment_type_prompt() -> str:

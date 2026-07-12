@@ -57,6 +57,9 @@ def patch_externals(monkeypatch):
                 "total_harga_pesanan": 100000, "status": "pending"}
 
     async def f_create_payment(order_id, amount, channel="bank_transfer"):
+        if channel == "qris":
+            return {"payment_id": 1, "pg_transaction_id": "MID",
+                    "va_number": None, "qris_url": "https://api.qr/mid-test", "status": "Pending"}
         return {"payment_id": 1, "pg_transaction_id": "MID",
                 "va_number": "8808123456789012", "qris_url": None, "status": "Pending"}
 
@@ -142,6 +145,8 @@ async def test_full_order_flow_with_dp():
     await handle_message(WA, "delivery")
     await handle_message(WA, "ya")
     r = await handle_message(WA, "dp")
+    assert "qris" in r.text.lower()              # channel prompt (VA vs QRIS)
+    r = await handle_message(WA, "va")
     assert "8808123456789012" in r.text          # VA from backend charge
     assert "Rp50.000" in r.text                  # DP 50% of 100000
 
@@ -170,9 +175,9 @@ async def test_payment_failure_cancels_backend_order(patch_externals):
     mp.setattr(backend, "cancel_order", f_cancel)
 
     await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 1}])
-    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya"):
+    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full"):
         await handle_message(WA, msg)
-    r = await handle_message(WA, "full")
+    r = await handle_message(WA, "va")
     assert "gagal" in r.text.lower()
     assert cancelled == [30001]                      # backend order cleaned up
     assert await store.get_active_pending(WA) is None
@@ -180,10 +185,19 @@ async def test_payment_failure_cancels_backend_order(patch_externals):
 
 async def test_full_payment_charges_full_amount():
     await _seed_cart_awaiting_confirmation([{"product": "Bolu Pandan", "qty": 2}])
-    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full"):
+    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full", "va"):
         await handle_message(WA, msg)
     order = await store.get_active_pending(WA)
     assert order.payment_type == "full" and order.amount_due == 150000
+
+
+async def test_qris_channel_returns_qr_link():
+    await _seed_cart_awaiting_confirmation([{"product": "Brownies Coklat", "qty": 1}])
+    for msg in ("sudah sesuai", "Budi", "Jl. Test 1", "pickup", "ya", "full"):
+        await handle_message(WA, msg)
+    r = await handle_message(WA, "qris")
+    assert "https://api.qr/mid-test" in r.text   # QR link relayed to customer
+    assert "8808" not in r.text
 
 
 async def test_identity_validation_rejects_bad_input():

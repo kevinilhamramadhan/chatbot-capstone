@@ -56,9 +56,10 @@ async def finalize_order(wa_number: str) -> str:
     order_id = order["order_id"]
     nomor_invoice = order.get("nomor_invoice") or f"#{order_id}"
 
-    # 2) Charge via backend -> Midtrans (VA). DP/Final inferred from amount.
+    # 2) Charge via backend -> Midtrans (VA/QRIS per customer choice at step 6).
+    channel = cust.get("channel", "bank_transfer")
     try:
-        pay = await backend.create_payment(order_id, amount_due, channel="bank_transfer")
+        pay = await backend.create_payment(order_id, amount_due, channel=channel)
     except Exception as exc:  # noqa: BLE001
         logger.exception("payment charge failed: %s", exc)
         # Cancel the just-created backend order so a retry doesn't stack
