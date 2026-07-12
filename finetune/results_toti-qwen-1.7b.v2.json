@@ -1,11 +1,11 @@
 {
   "model": "toti-qwen-1.7b",
   "rows": 100,
-  "function_selection_acc": 0.9,
-  "param_exact_acc": 0.7,
+  "function_selection_acc": 0.85,
+  "param_exact_acc": 0.633,
   "invalid_call_rate": 0.0,
-  "irrelevance_acc": 0.925,
-  "false_tool_rate": 0.075,
+  "irrelevance_acc": 0.975,
+  "false_tool_rate": 0.025,
   "per_type": {
     "N1": {
       "n": 11,
@@ -43,8 +43,8 @@
       "n": 7,
       "sel": 0,
       "param": 0,
-      "irrelevant_ok": 4,
-      "false_tool": 3,
+      "irrelevant_ok": 6,
+      "false_tool": 1,
       "invalid": 0
     },
     "N6": {
@@ -57,8 +57,8 @@
     },
     "T1": {
       "n": 9,
-      "sel": 8,
-      "param": 7,
+      "sel": 9,
+      "param": 8,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
@@ -73,24 +73,24 @@
     },
     "T11": {
       "n": 2,
-      "sel": 2,
-      "param": 2,
+      "sel": 0,
+      "param": 0,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
     },
     "T12": {
       "n": 2,
-      "sel": 2,
-      "param": 2,
+      "sel": 1,
+      "param": 1,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
     },
     "T2": {
       "n": 4,
-      "sel": 4,
-      "param": 4,
+      "sel": 3,
+      "param": 2,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
@@ -113,8 +113,8 @@
     },
     "T5": {
       "n": 7,
-      "sel": 5,
-      "param": 4,
+      "sel": 4,
+      "param": 3,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
@@ -137,8 +137,8 @@
     },
     "T8": {
       "n": 6,
-      "sel": 5,
-      "param": 5,
+      "sel": 6,
+      "param": 6,
       "irrelevant_ok": 0,
       "false_tool": 0,
       "invalid": 0
@@ -152,5 +152,5 @@
       "invalid": 0
     }
   },
-  "seconds": 1433.9
+  "seconds": 1420.9
 }

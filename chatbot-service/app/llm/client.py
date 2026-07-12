@@ -19,4 +19,5 @@ def get_llm():
         top_p=settings.llm_top_p,
         num_ctx=settings.llm_num_ctx,
         num_predict=settings.llm_num_predict,  # cap runaway generations (CPU latency tail)
+        keep_alive=settings.ollama_keep_alive,  # stay in RAM (no cold-start reload)
     )

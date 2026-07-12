@@ -34,7 +34,7 @@ Dokumen capstone/
 
 # Fine-tune model binaries — live on HuggingFace (LasagnaS/toti-qwen-gguf), not git
 *.gguf
-*.gguf.v1
+*.gguf.*
 finetune/gguf_dl/
 # transient local backups
 *.v1.json

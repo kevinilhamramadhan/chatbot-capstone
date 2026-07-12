@@ -36,6 +36,16 @@ class Settings(BaseSettings):
     # unlimited and a small model that fails to stop cleanly can generate for
     # 100s+ on CPU (observed on 1.7b). 768 fits a thinking trace + a WA reply.
     llm_num_predict: int = 768
+    # Keep the LLM + embedding models resident in Ollama's RAM instead of
+    # unloading after idle, in SECONDS: -1 = forever, or a positive count to
+    # auto-unload (e.g. 300 = 5m). Must be an int: OllamaEmbeddings rejects a
+    # duration string, and ChatOllama rejects a bare "-1".
+    ollama_keep_alive: int = -1
+    # Preload the models into RAM on service startup (main.lifespan) so the first
+    # real user never pays the ~1min cold load. Turn OFF on a dev laptop to keep
+    # RAM free until you actually chat: WARMUP_ON_STARTUP=false (+ a positive
+    # OLLAMA_KEEP_ALIVE so idle models unload).
+    warmup_on_startup: bool = True
 
     # ── RAG / ChromaDB ────────────────────────────────────────────────────────
     chroma_persist_dir: str = "./chroma_db"

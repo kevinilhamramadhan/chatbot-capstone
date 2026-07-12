@@ -2,14 +2,14 @@
   "model": "toti-qwen-1.7b",
   "runs_per_scenario": 3,
   "scenarios": 18,
-  "tool_selection_correct_runs": 28,
+  "tool_selection_correct_runs": 33,
   "tool_selection_total_runs": 36,
-  "args_exact_runs": 20,
+  "args_exact_runs": 26,
   "non_tool_correct_runs": 18,
   "non_tool_total_runs": 18,
-  "latency_overall_med": 4.58,
-  "latency_overall_mean": 7.17,
-  "total_seconds": 387.3,
+  "latency_overall_med": 5.49,
+  "latency_overall_mean": 9.3,
+  "total_seconds": 502.2,
   "per_scenario": [
     {
       "type": "T1",
@@ -19,30 +19,30 @@
       "gold": "get_menu {}",
       "runs": [
         {
-          "latency": 50.53,
+          "latency": 60.59,
+          "decided": "TEXT: Berikut menu Toti Cakery:\n• Cupcakes isi 9 Vanilla — Rp120.000\n• Cupcakes isi 7 Cokelat — Rp90.000\n\nMau lihat detail salah satu kue? Sebutkan namanya ya 😊",
+          "ok": false,
+          "args_match": null
+        },
+        {
+          "latency": 2.72,
           "decided": "TOOL get_menu {}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.66,
-          "decided": "TOOL get_menu {}",
-          "ok": true,
-          "args_match": true
-        },
-        {
-          "latency": 2.49,
+          "latency": 2.68,
           "decided": "TOOL get_menu {}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 2.49,
-      "lat_med": 2.66,
-      "lat_max": 50.53,
-      "correct_runs": 3,
+      "lat_min": 2.68,
+      "lat_med": 2.72,
+      "lat_max": 60.59,
+      "correct_runs": 2,
       "total_runs": 3,
-      "args_match_runs": 3
+      "args_match_runs": 2
     },
     {
       "type": "T2",
@@ -52,27 +52,27 @@
       "gold": "get_menu {\"kategori\": \"cupcake\"}",
       "runs": [
         {
-          "latency": 3.84,
+          "latency": 4.38,
           "decided": "TOOL get_menu {\"kategori\": \"cupcake\"}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.83,
+          "latency": 3.36,
           "decided": "TOOL get_menu {\"kategori\": \"cupcake\"}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.85,
+          "latency": 3.44,
           "decided": "TOOL get_menu {\"kategori\": \"cupcake\"}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 2.83,
-      "lat_med": 2.85,
-      "lat_max": 3.84,
+      "lat_min": 3.36,
+      "lat_med": 3.44,
+      "lat_max": 4.38,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 3
@@ -85,27 +85,27 @@
       "gold": "get_product_detail {\"product\": \"Mini Cookies 7cm\"}",
       "runs": [
         {
-          "latency": 7.82,
+          "latency": 8.74,
           "decided": "TOOL get_product_detail {\"product\": \"Mini Cookies 7cm\"}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 3.33,
+          "latency": 4.26,
           "decided": "TOOL get_product_detail {\"product\": \"Mini Cookies 7cm\"}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 3.28,
+          "latency": 4.07,
           "decided": "TOOL get_product_detail {\"product\": \"Mini Cookies 7cm\"}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 3.28,
-      "lat_med": 3.33,
-      "lat_max": 7.82,
+      "lat_min": 4.07,
+      "lat_med": 4.26,
+      "lat_max": 8.74,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 3
@@ -118,27 +118,27 @@
       "gold": "compare_products {\"products\": [\"Giant Cookies 15cm\", \"Cupcakes isi 9 Cokelat\"]}",
       "runs": [
         {
-          "latency": 8.01,
+          "latency": 9.68,
           "decided": "TOOL compare_products {\"products\": [\"Giant Cookies 15cm\", \"Cupcakes isi 9 Cokelat\"]}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 4.81,
+          "latency": 5.99,
           "decided": "TOOL compare_products {\"products\": [\"Giant Cookies 15cm\", \"Cupcakes isi 9 Cokelat\"]}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 4.84,
+          "latency": 5.87,
           "decided": "TOOL compare_products {\"products\": [\"Giant Cookies 15cm\", \"Cupcakes isi 9 Cokelat\"]}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 4.81,
-      "lat_med": 4.84,
-      "lat_max": 8.01,
+      "lat_min": 5.87,
+      "lat_med": 5.99,
+      "lat_max": 9.68,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 3
@@ -151,30 +151,30 @@
       "gold": "add_to_cart {\"items\": [{\"product\": \"Cupcakes isi 6 Cokelat\", \"qty\": 1}]}",
       "runs": [
         {
-          "latency": 3.12,
-          "decided": "TEXT: Siap! Mau cupcakes yang isi berapa ya kak?",
-          "ok": false,
-          "args_match": null
-        },
-        {
-          "latency": 5.15,
+          "latency": 7.11,
           "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cupcakes isi 6 Cokelat\", \"qty\": 1}]}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.14,
-          "decided": "TEXT: Siap! Mau cupcakes yang isi berapa ya kak?",
-          "ok": false,
-          "args_match": null
+          "latency": 5.76,
+          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cupcakes isi 6 Cokelat\", \"qty\": 1}]}",
+          "ok": true,
+          "args_match": true
+        },
+        {
+          "latency": 5.65,
+          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cupcakes isi 6 Cokelat\", \"qty\": 1}]}",
+          "ok": true,
+          "args_match": true
         }
       ],
-      "lat_min": 2.14,
-      "lat_med": 3.12,
-      "lat_max": 5.15,
-      "correct_runs": 1,
+      "lat_min": 5.65,
+      "lat_med": 5.76,
+      "lat_max": 7.11,
+      "correct_runs": 3,
       "total_runs": 3,
-      "args_match_runs": 1
+      "args_match_runs": 3
     },
     {
       "type": "T6",
@@ -184,27 +184,27 @@
       "gold": "add_to_cart {\"items\": [{\"product\": \"Giant Cookies 15cm Matcha\", \"qty\": 6}, {\"product\": \"Cake 22cm Cokelat\", \"qty\": 10}]}",
       "runs": [
         {
-          "latency": 8.77,
+          "latency": 9.8,
           "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Giant Cookies 10cm Matcha\", \"qty\": 6}, {\"product\": \"Cake 22cm Cokelat\", \"qty\": 10}]}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 7.04,
+          "latency": 8.39,
           "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Giant Cookies 10cm Matcha\", \"qty\": 6}, {\"product\": \"Cake 22cm Cokelat\", \"qty\": 10}]}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 7.0,
+          "latency": 8.15,
           "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Giant Cookies 10cm Matcha\", \"qty\": 6}, {\"product\": \"Cake 22cm Cokelat\", \"qty\": 10}]}",
           "ok": true,
           "args_match": false
         }
       ],
-      "lat_min": 7.0,
-      "lat_med": 7.04,
-      "lat_max": 8.77,
+      "lat_min": 8.15,
+      "lat_med": 8.39,
+      "lat_max": 9.8,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 0
@@ -217,27 +217,27 @@
       "gold": "add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 10}]}",
       "runs": [
         {
-          "latency": 10.97,
-          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 15}]}",
+          "latency": 11.81,
+          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 6}]}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 4.69,
-          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 15}]}",
+          "latency": 5.13,
+          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 6}]}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 4.68,
-          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 15}]}",
+          "latency": 5.28,
+          "decided": "TOOL add_to_cart {\"items\": [{\"product\": \"Cake 15cm Vanilla\", \"qty\": 12}]}",
           "ok": true,
           "args_match": false
         }
       ],
-      "lat_min": 4.68,
-      "lat_med": 4.69,
-      "lat_max": 10.97,
+      "lat_min": 5.13,
+      "lat_med": 5.28,
+      "lat_max": 11.81,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 0
@@ -250,27 +250,27 @@
       "gold": "get_order_status {}",
       "runs": [
         {
-          "latency": 3.28,
+          "latency": 4.09,
           "decided": "TOOL get_order_status {}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.4,
+          "latency": 2.81,
           "decided": "TOOL get_order_status {}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.4,
+          "latency": 2.68,
           "decided": "TOOL get_order_status {}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 2.4,
-      "lat_med": 2.4,
-      "lat_max": 3.28,
+      "lat_min": 2.68,
+      "lat_med": 2.81,
+      "lat_max": 4.09,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 3
@@ -283,27 +283,27 @@
       "gold": "cancel_order {}",
       "runs": [
         {
-          "latency": 2.86,
+          "latency": 3.32,
           "decided": "TOOL cancel_order {}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.3,
+          "latency": 2.59,
           "decided": "TOOL cancel_order {}",
           "ok": true,
           "args_match": true
         },
         {
-          "latency": 2.29,
+          "latency": 2.8,
           "decided": "TOOL cancel_order {}",
           "ok": true,
           "args_match": true
         }
       ],
-      "lat_min": 2.29,
-      "lat_med": 2.3,
-      "lat_max": 2.86,
+      "lat_min": 2.59,
+      "lat_med": 2.8,
+      "lat_max": 3.32,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 3
@@ -316,27 +316,27 @@
       "gold": "escalate_to_admin {\"reason\": \"Pelanggan komplain pesanan diduga salah kirim\"}",
       "runs": [
         {
-          "latency": 5.34,
-          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain pesanan kakinya salah kirim\"}",
+          "latency": 6.45,
+          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain kue pesanannya salah dikirim\"}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 3.99,
-          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain barang pesanannya salah kirim\"}",
+          "latency": 5.6,
+          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain kue pesanannya salah dikirim\"}",
           "ok": true,
           "args_match": false
         },
         {
-          "latency": 3.95,
-          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain barang pesanannya salah kirim\"}",
+          "latency": 7.26,
+          "decided": "TOOL escalate_to_admin {\"reason\": \"Pelanggan komplain kue pesanannya salah dikirim\"}",
           "ok": true,
           "args_match": false
         }
       ],
-      "lat_min": 3.95,
-      "lat_med": 3.99,
-      "lat_max": 5.34,
+      "lat_min": 5.6,
+      "lat_med": 6.45,
+      "lat_max": 7.26,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": 0
@@ -349,30 +349,30 @@
       "gold": "financial_report {}",
       "runs": [
         {
-          "latency": 5.14,
-          "decided": "TEXT: Maaf kak, untuk hal itu aku belum punya informasinya. Mau kuteruskan ke admin supaya dijawab langsung?",
-          "ok": false,
-          "args_match": null
+          "latency": 5.5,
+          "decided": "TOOL financial_report {}",
+          "ok": true,
+          "args_match": true
         },
         {
-          "latency": 4.51,
-          "decided": "TEXT: Maaf kak, untuk hal itu aku belum punya informasinya. Mau kuteruskan ke admin supaya dijawab langsung?",
-          "ok": false,
-          "args_match": null
+          "latency": 4.17,
+          "decided": "TOOL financial_report {}",
+          "ok": true,
+          "args_match": true
         },
         {
-          "latency": 6.07,
-          "decided": "TEXT: Maaf kak, aku cuma bisa jawab soal Toti Cakery — menu, pemesanan, pembayaran, dan info toko 😊 Ada yang mau ditanyakan soal itu?",
-          "ok": false,
-          "args_match": null
+          "latency": 4.05,
+          "decided": "TOOL financial_report {}",
+          "ok": true,
+          "args_match": true
         }
       ],
-      "lat_min": 4.51,
-      "lat_med": 5.14,
-      "lat_max": 6.07,
-      "correct_runs": 0,
+      "lat_min": 4.05,
+      "lat_med": 4.17,
+      "lat_max": 5.5,
+      "correct_runs": 3,
       "total_runs": 3,
-      "args_match_runs": 0
+      "args_match_runs": 3
     },
     {
       "type": "T12",
@@ -382,30 +382,30 @@
       "gold": "business_analytics {}",
       "runs": [
         {
-          "latency": 6.94,
-          "decided": "TEXT: Maaf kak, aku cuma bisa bantu seputar Toti Cakery — menu, pemesanan, pembayaran, dan info toko 😊 Ada yang mau ditanyakan soal itu?",
-          "ok": false,
-          "args_match": null
+          "latency": 5.48,
+          "decided": "TOOL business_analytics {}",
+          "ok": true,
+          "args_match": true
         },
         {
-          "latency": 2.63,
+          "latency": 4.25,
           "decided": "TOOL financial_report {}",
           "ok": false,
           "args_match": true
         },
         {
-          "latency": 6.25,
-          "decided": "TEXT: Maaf kak, aku cuma bisa bantu seputar Toti Cakery — menu, pemesanan, pembayaran, dan info toko 😊 Ada yang mau ditanyakan soal itu?",
+          "latency": 3.83,
+          "decided": "TOOL financial_report {}",
           "ok": false,
-          "args_match": null
+          "args_match": true
         }
       ],
-      "lat_min": 2.63,
-      "lat_med": 6.25,
-      "lat_max": 6.94,
-      "correct_runs": 0,
+      "lat_min": 3.83,
+      "lat_med": 4.25,
+      "lat_max": 5.48,
+      "correct_runs": 1,
       "total_runs": 3,
-      "args_match_runs": 1
+      "args_match_runs": 3
     },
     {
       "type": "N1",
@@ -415,27 +415,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 58.18,
-          "decided": "TEXT: Semua kue di Toti Cakery dibuat dari bahan halal kak. Untuk daya tahan, kue terbaik dimakan di hari yang sama. Kalau disimpan di lemari pendingin (chiller), kue",
+          "latency": 90.52,
+          "decided": "TEXT: Semua produk kami dibuat dari bahan halal kak. Paling enak dinikmati di hari yang sama, ya — kalau disimpan di chiller tahan sekitar 2-3 hari. Hindari suhu ruan",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 8.87,
-          "decided": "TEXT: Semua produk Toti Cakery dibuat dari bahan-bahan halal kak. Untuk daya tahan, kue paling baik dinikmati di hari yang sama. Jadi, jangan simpan kue di suhu ruang",
+          "latency": 15.73,
+          "decided": "TEXT: Semua produk kami dibuat dari bahan halal kak. Paling enak dinikmati di hari yang sama; kalau disimpan di chiller tahan sekitar 2-3 hari. Hindari suhu ruang ter",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 9.89,
-          "decided": "TEXT: Semua kue di Toti Cakery dibuat dari bahan-bahan halal kak. Untuk daya tahan, kue terbaik dimakan di hari yang sama. Kalau disimpan di lemari pendingin (chiller",
+          "latency": 14.45,
+          "decided": "TEXT: Semua produk kami dibuat dari bahan halal kak. Paling enak dinikmati di hari yang sama; kalau disimpan di chiller tahan sekitar 2-3 hari. Hindari suhu ruang ter",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 8.87,
-      "lat_med": 9.89,
-      "lat_max": 58.18,
+      "lat_min": 14.45,
+      "lat_med": 15.73,
+      "lat_max": 90.52,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
@@ -448,27 +448,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 42.68,
-          "decided": "TEXT: Maaf kak, untuk hal itu aku belum punya informasinya. Mau kuteruskan ke admin supaya dijawab langsung?",
+          "latency": 60.49,
+          "decided": "TEXT: Waduh, aku belum bisa jawab soal itu 🙏 Kalau mau, aku bisa hubungkan kamu ke admin ya.",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 4.66,
-          "decided": "TEXT: Maaf kak, untuk hal itu aku belum punya informasinya. Mau kuteruskan ke admin supaya dijawab langsung?",
+          "latency": 4.71,
+          "decided": "TEXT: Waduh, aku belum bisa jawab yang itu 🙏 Kalau mau, aku bisa hubungkan kamu ke admin ya.",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 4.65,
-          "decided": "TEXT: Maaf kak, untuk hal itu aku belum punya informasinya. Mau kuteruskan ke admin supaya dijawab langsung?",
+          "latency": 4.38,
+          "decided": "TEXT: Hmm, aku belum bisa jawab soal itu 🙏 Kalau mau, aku bisa hubungkan kamu ke admin ya.",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 4.65,
-      "lat_med": 4.66,
-      "lat_max": 42.68,
+      "lat_min": 4.38,
+      "lat_med": 4.71,
+      "lat_max": 60.49,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
@@ -481,27 +481,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 2.61,
-          "decided": "TEXT: You're welcome! Feel free to chat anytime 😊",
+          "latency": 3.76,
+          "decided": "TEXT: You're welcome! I'm Toti Cakery's virtual assistant — happy to help 😊",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 1.87,
-          "decided": "TEXT: You're welcome! Happy to help 😊",
+          "latency": 3.31,
+          "decided": "TEXT: Sama-sama kak! Kalau butuh apa-apa lagi, chat aja ya 😊",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 2.69,
-          "decided": "TEXT: You're welcome! Feel free to message me anytime you need something 😊",
+          "latency": 1.95,
+          "decided": "TEXT: You're welcome! Enjoy your cookies 😊",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 1.87,
-      "lat_med": 2.61,
-      "lat_max": 2.69,
+      "lat_min": 1.95,
+      "lat_med": 3.31,
+      "lat_max": 3.76,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
@@ -514,27 +514,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 8.42,
+          "latency": 8.6,
           "decided": "TEXT: That's outside my scope 🙏 I'm Toti Cakery's shop assistant, so I can help with cakes, orders, and payments. Want to see the menu?",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 5.42,
+          "latency": 5.65,
           "decided": "TEXT: That's outside my scope 🙏 I'm Toti Cakery's shop assistant, so I can help with cakes, orders, and payments. Want to see the menu?",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 5.47,
+          "latency": 5.78,
           "decided": "TEXT: That's outside my scope 🙏 I'm Toti Cakery's shop assistant, so I can help with cakes, orders, and payments. Want to see the menu?",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 5.42,
-      "lat_med": 5.47,
-      "lat_max": 8.42,
+      "lat_min": 5.65,
+      "lat_med": 5.78,
+      "lat_max": 8.6,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
@@ -547,27 +547,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 5.22,
-          "decided": "TEXT: Siap, nggak apa-apa kak. Aku di sini kalau butuh info atau mau pesan 😊",
+          "latency": 8.0,
+          "decided": "TEXT: Siap, sesuai pesanan yang belum dibayar, waktu sekarang 17.46, dan alokasi 1 jam kerja. Mau kubantu sekarang?",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 2.41,
-          "decided": "TEXT: Siap! Mau kubantu apa hari ini kak?",
+          "latency": 2.6,
+          "decided": "TEXT: Boleh kak, tinggal chat lagi di sini aja 😊",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 2.39,
-          "decided": "TEXT: Siap! Mau kubantu apa hari ini kak?",
+          "latency": 3.73,
+          "decided": "TEXT: Siap, nanti dihitung dan segera dikoordinasikan dengan tim kak 🙏",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 2.39,
-      "lat_med": 2.41,
-      "lat_max": 5.22,
+      "lat_min": 2.6,
+      "lat_med": 3.73,
+      "lat_max": 8.0,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
@@ -580,27 +580,27 @@
       "gold": "(no tool)",
       "runs": [
         {
-          "latency": 4.43,
-          "decided": "TEXT: Siap! Mau yang mana — mini, sederhana, atau isi box kak? 😊",
+          "latency": 7.74,
+          "decided": "TEXT: Waduh, aku belum bisa jawab yang itu ya kak — tugasku khusus melayani Toti Cakery 😊 Kalau soal menu atau pesanan, gaskeun!",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 3.16,
-          "decided": "TEXT: Siap! Mau yang isi, bentuk, atau ukuran khusus kak?",
+          "latency": 6.64,
+          "decided": "TEXT: Maaf kak, aku cuma bisa bantu seputar Toti Cakery — menu, pemesanan, pembayaran, dan info toko 😊 Ada yang mau ditanyakan soal itu?",
           "ok": true,
           "args_match": null
         },
         {
-          "latency": 3.1,
-          "decided": "TEXT: Siap! Mau yang isi, bentuk, atau ukuran khusus kak?",
+          "latency": 6.4,
+          "decided": "TEXT: Maaf kak, aku cuma bisa bantu seputar Toti Cakery — menu, pemesanan, pembayaran, dan info toko 😊 Ada yang mau ditanyakan soal itu?",
           "ok": true,
           "args_match": null
         }
       ],
-      "lat_min": 3.1,
-      "lat_med": 3.16,
-      "lat_max": 4.43,
+      "lat_min": 6.4,
+      "lat_med": 6.64,
+      "lat_max": 7.74,
       "correct_runs": 3,
       "total_runs": 3,
       "args_match_runs": null
