@@ -1,10 +1,9 @@
-# Toti Cakery Chatbot — full stack.
+# Toti Cakery Chatbot — full stack, satu perintah:
 #
-#   docker compose up --build
+#   docker compose up --build -d
 #
-# Ollama runs on the HOST by default (OLLAMA_BASE_URL via host.docker.internal).
-# The real backend (Nicholas's FastAPI) also runs separately; point
-# BACKEND_BASE_URL at it. See .env.example / README.md.
+# Menjalankan 4 container: chatbot, backend (Nicholas), Ollama, wwebjs-api.
+# Semua saling memanggil lewat nama service di network internal compose.
 
 services:
   chatbot-service:
@@ -12,21 +11,50 @@ services:
     container_name: toti-chatbot
     env_file: .env
     environment:
-      # Defaults so containers talk to each other; .env can override.
+      # Topologi antar-container (menimpa nilai .env):
       WWEBJS_BASE_URL: http://wwebjs-api:3000
+      BACKEND_BASE_URL: http://backend:8001
+      OLLAMA_BASE_URL: http://ollama:11434
     ports:
       # Bound to localhost: /webhook/* has no auth (wwebjs-api can't send an
-      # auth header), so it must not be reachable from the LAN. The backend's
-      # C4 ready-push runs on this host and still reaches 127.0.0.1:8000.
+      # auth header), so it must not be reachable from the LAN.
       - "127.0.0.1:8000:8000"
     volumes:
       - ./chatbot-service/chroma_db:/app/chroma_db      # persistent vector store
       - ./chatbot-service/toti_chatbot.db:/app/toti_chatbot.db
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     depends_on:
       - wwebjs-api
+      - backend
+      - ollama
     restart: unless-stopped
+
+  backend:
+    # Backend-Cakery punya Nicholas (repo read-only, tanpa Dockerfile) —
+    # dijalankan apa adanya di image python resmi, kode di-mount.
+    image: python:3.12-slim
+    container_name: cakery-backend
+    working_dir: /app
+    command: bash -c "pip install -q -r requirements.txt && uvicorn app.main:app --host 0.0.0.0 --port 8001"
+    env_file: Backend-Cakery/.env          # DATABASE_URL (Neon), Midtrans, SERVICE_API_KEY
+    environment:
+      CHATBOT_URL: http://chatbot-service:8000   # tujuan push C4 "pesanan siap"
+    volumes:
+      - ./Backend-Cakery:/app
+      - pip-cache:/root/.cache/pip         # biar pip install cepat di start berikutnya
+    ports:
+      - "127.0.0.1:8001:8001"              # akses Swagger /docs dari host
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: toti-ollama
+    volumes:
+      # Pakai model yang SUDAH ada di host (toti-qwen-1.7b, qwen3-embedding, dll)
+      # — tidak perlu pull/import ulang. Host ini CPU-only, jadi tanpa config GPU.
+      - /usr/share/ollama/.ollama:/root/.ollama
+    restart: unless-stopped
+    # Tidak publish port: hanya dipanggil chatbot dari dalam network compose.
+    # Kelola model: docker exec -it toti-ollama ollama list
 
   wwebjs-api:
     image: avoylenko/wwebjs-api:latest
@@ -42,6 +70,9 @@ services:
     volumes:
       - ./whatsapp-gateway/sessions:/usr/src/app/sessions
     restart: unless-stopped
+
+volumes:
+  pip-cache:
 
 # Note: Chroma runs embedded inside chatbot-service (PersistentClient) writing to
 # the mounted ./chatbot-service/chroma_db volume — no separate container needed.
