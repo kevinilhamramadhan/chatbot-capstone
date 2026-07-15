@@ -9,7 +9,7 @@ from langchain_core.tools import tool
 from app.conversation import store
 from app.conversation.context import get_turn_context
 from app.conversation.states import State
-from app.tools.formatting import product_label, resolve_product, rupiah
+from app.tools.formatting import options_line, product_label, resolve_product, rupiah
 
 
 def cart_summary(cart: list[dict]) -> str:
@@ -46,7 +46,7 @@ async def add_to_cart(items: list[dict]) -> str:
         )
 
     cart = await store.get_cart(wa)
-    added, not_found, unavailable = [], [], []
+    added, not_found, unavailable, ambiguous = [], [], [], []
     for raw in items:
         name_q = str(raw.get("product") or raw.get("nama") or "").strip()
         try:
@@ -57,7 +57,11 @@ async def add_to_cart(items: list[dict]) -> str:
             qty = 1
         if not name_q:
             continue
-        p = await resolve_product(name_q)
+        p, options = await resolve_product(name_q)
+        if p is None and options:
+            # Several products fit ("cupcake" -> isi 4/6/9…): ask, never guess.
+            ambiguous.append(f"'{name_q}': {options_line(options)}")
+            continue
         if p is None:
             not_found.append(name_q)
             continue
@@ -87,6 +91,11 @@ async def add_to_cart(items: list[dict]) -> str:
     await store.set_cart(wa, cart)
 
     if not added:
+        if ambiguous and not not_found and not unavailable:
+            return (
+                "Ada beberapa pilihan untuk " + "; ".join(ambiguous)
+                + ". Sebutkan yang mana ya? 😊"
+            )
         if unavailable and not not_found:
             return (
                 f"Maaf, {', '.join(unavailable)} sedang tidak tersedia. "
@@ -99,6 +108,8 @@ async def add_to_cart(items: list[dict]) -> str:
     ctx.next_state = State.AWAITING_CART_CONFIRMATION
 
     msg = cart_summary(cart)
+    if ambiguous:
+        msg += "\n\n(Belum kumasukkan karena ada beberapa pilihan — " + "; ".join(ambiguous) + ")"
     if not_found:
         msg += f"\n\n(Tidak ditemukan: {', '.join(not_found)})"
     if unavailable:

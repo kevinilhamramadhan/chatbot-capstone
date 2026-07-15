@@ -14,42 +14,59 @@ def product_label(p: dict) -> str:
     return p.get("nama_produk") or p.get("nama") or f"Produk #{p.get('id')}"
 
 
-async def resolve_product(query: str) -> dict | None:
+def _tokens(s: str) -> set[str]:
+    # rstrip("s") folds singular/plural ("cupcake" == "cupcakes") — without it a
+    # bare "cupcake" query matched nothing/one variant arbitrarily.
+    return {w.rstrip("s") for w in s.lower().split() if w}
+
+
+async def resolve_product(query: str) -> tuple[dict | None, list[dict]]:
     """Find a product by id or (fuzzy) name from the live backend list.
 
-    Scores every candidate by token overlap and returns the BEST match, not the
-    first partial hit. The old first-hit-wins loop returned the alphabetically
-    first product sharing any word ("cake 22cm" -> "Cake 10cm", "giant cookies"
-    -> "Bento Cookies"), silently putting the wrong item (and price) in the cart.
-    Scoring by how much of the label the query covers makes the specific match
-    ("Cake 22cm") beat the generic one ("Cake 10cm"). No shared token -> no match.
+    Scores every candidate by token overlap; the BEST match wins. Returns
+    (match, candidates):
+      (product, [])     -> confident single best match
+      (None, [a, b, …]) -> AMBIGUOUS: several products tie for best ("cupcake"
+                           fits isi 4/6/9…). Callers must ASK, never guess —
+                           guessing is how "4 cupcake" became "isi 6 x4".
+      (None, [])        -> not found
     """
     query = query.strip()
     if query.isdigit():
         p = await products_api.get_product(int(query))
         if p:
-            return p
+            return p, []
     items = await products_api.list_products(only_active=True)
     q = query.lower()
-    q_tokens = set(q.split())
+    q_tokens = _tokens(q)
     if not q_tokens:
-        return None
+        return None, []
 
-    best, best_score = None, 0.0
+    scored: list[tuple[float, dict]] = []
     for p in items:
         label = product_label(p).lower()
         if label == q:
-            return p  # exact name always wins
-        l_tokens = set(label.split())
+            return p, []  # exact name always wins
+        l_tokens = _tokens(label)
         overlap = q_tokens & l_tokens
         if not overlap:
             continue
-        # Absolute matched-token count dominates so a specific match wins over a
-        # generic one (2 words of "Cake 22cm" beat the 1 word of a bare "Cake");
-        # label+query coverage only breaks ties toward the tighter name. (An
-        # earlier "+1 if substring" bonus let a 1-word label steal the match by
-        # sharing its single word — this counts real overlap instead.)
+        # Matched-token count dominates (specific beats generic); coverage of
+        # label+query breaks ties toward the tighter name.
         score = len(overlap) * 2 + len(overlap) / len(l_tokens) + len(overlap) / len(q_tokens)
-        if score > best_score:
-            best_score, best = score, p
-    return best
+        scored.append((score, p))
+
+    if not scored:
+        return None, []
+    best_score = max(s for s, _ in scored)
+    best = [p for s, p in scored if s >= best_score - 1e-9]
+    if len(best) == 1:
+        return best[0], []
+    return None, best
+
+
+def options_line(candidates: list[dict], limit: int = 6) -> str:
+    """'Cupcakes isi 4 (Rp40.000), Cupcakes isi 6 (Rp55.000), …' for ask-backs."""
+    return ", ".join(
+        f"{product_label(p)} ({rupiah(p.get('harga_jual'))})" for p in candidates[:limit]
+    )

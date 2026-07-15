@@ -3,7 +3,7 @@
 from langchain_core.tools import tool
 
 from app.conversation.context import OutboundMedia, get_turn_context
-from app.tools.formatting import product_label, resolve_product, rupiah
+from app.tools.formatting import options_line, product_label, resolve_product, rupiah
 
 
 @tool
@@ -13,8 +13,13 @@ async def get_product_detail(product: str) -> str:
     `product` bisa berupa nama kue atau id produk. Gunakan saat pelanggan
     menanyakan detail/penjelasan satu produk tertentu.
     """
-    p = await resolve_product(product)
+    p, options = await resolve_product(product)
     if p is None:
+        if options:
+            return (
+                f"Untuk '{product}' ada beberapa pilihan: {options_line(options)}. "
+                "Yang mana yang mau kamu lihat? 😊"
+            )
         return f"Maaf, aku tidak menemukan produk '{product}'. Coba cek menu dulu ya."
 
     name = product_label(p)

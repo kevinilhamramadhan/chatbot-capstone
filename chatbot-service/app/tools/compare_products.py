@@ -2,7 +2,7 @@
 
 from langchain_core.tools import tool
 
-from app.tools.formatting import product_label, resolve_product, rupiah
+from app.tools.formatting import options_line, product_label, resolve_product, rupiah
 
 
 @tool
@@ -17,8 +17,13 @@ async def compare_products(products: list[str]) -> str:
     resolved = []
     not_found = []
     for q in products:
-        p = await resolve_product(q)
-        (resolved.append(p) if p else not_found.append(q))
+        p, options = await resolve_product(q)
+        if p:
+            resolved.append(p)
+        elif options:
+            not_found.append(f"{q} (ambigu — maksudnya: {options_line(options, 3)}?)")
+        else:
+            not_found.append(q)
 
     if len(resolved) < 2:
         nf = ", ".join(not_found)

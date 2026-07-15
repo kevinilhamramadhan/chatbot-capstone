@@ -131,6 +131,44 @@ async def test_add_to_cart_rejects_unavailable(monkeypatch):
     assert await store.get_cart(WA) == []
 
 
+async def test_add_to_cart_asks_when_product_ambiguous(monkeypatch):
+    """Regression (live WA test): 'beli 4 cupcake' silently became 'Cupcakes
+    isi 6 x4'. Ambiguous names must trigger a question, never a guess."""
+    from app.backend_client import products as products_api
+    from app.tools.add_to_cart import add_to_cart
+    cups = [
+        {"id": 16, "nama_produk": "Cupcakes isi 4", "harga_jual": 40000, "is_active": True},
+        {"id": 17, "nama_produk": "Cupcakes isi 6", "harga_jual": 55000, "is_active": True},
+        {"id": 18, "nama_produk": "Cupcakes isi 9", "harga_jual": 80000, "is_active": True},
+    ]
+    monkeypatch.setattr(products_api, "list_products",
+                        lambda only_active=True, kategori=None: _async(cups))
+    set_turn_context(TurnContext(wa_number=WA))
+    out = await add_to_cart.ainvoke({"items": [{"product": "cupcake", "qty": 4}]})
+    assert await store.get_cart(WA) == []                    # nothing guessed in
+    assert "isi 4" in out and "isi 6" in out and "isi 9" in out
+    assert "mana" in out.lower()                             # asks the customer
+
+    # A specific answer resolves normally.
+    out = await add_to_cart.ainvoke({"items": [{"product": "cupcakes isi 4", "qty": 4}]})
+    cart = await store.get_cart(WA)
+    assert len(cart) == 1 and cart[0]["product_id"] == 16 and cart[0]["qty"] == 4
+
+
+async def test_product_detail_asks_when_ambiguous(monkeypatch):
+    from app.backend_client import products as products_api
+    from app.tools.get_product_detail import get_product_detail
+    cups = [
+        {"id": 16, "nama_produk": "Cupcakes isi 4", "harga_jual": 40000, "is_active": True},
+        {"id": 17, "nama_produk": "Cupcakes isi 6", "harga_jual": 55000, "is_active": True},
+    ]
+    monkeypatch.setattr(products_api, "list_products",
+                        lambda only_active=True, kategori=None: _async(cups))
+    set_turn_context(TurnContext(wa_number=WA))
+    out = await get_product_detail.ainvoke({"product": "cupcake"})
+    assert "isi 4" in out and "isi 6" in out and "mana" in out.lower()
+
+
 async def _async(v):
     return v
 
