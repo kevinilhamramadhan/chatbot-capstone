@@ -28,6 +28,29 @@
        * Dites live: user level Admin ditolak 403 (require_owner bekerja).
          Toggle penuh tinggal dites pakai akun Owner (level 1).
 
+==============================================================================
+ PERMINTAAN BARU KECIL: foto produk bisa diedit dari Admin Site (1 baris!)
+==============================================================================
+ Fitur: Admin ganti/isi foto menu -> chatbot otomatis kirim foto itu saat
+ pelanggan tanya detail kue (jalur kirim foto di chatbot SUDAH jadi; kolom
+ products.image_url juga sudah ada — cuma belum bisa di-update via API).
+
+ Yang dikerjakan (benar-benar 1 baris):
+   app/schemas/product.py -> class ProductUpdate, tambah:
+       image_url: Optional[str] = Field(None, max_length=500)
+   (repositories/product_repo.py::update sudah generik exclude_unset,
+    langsung ikut jalan tanpa diubah.)
+
+ Alur yang kami rencanakan (biar kamu tidak perlu bikin endpoint upload):
+   1) Admin Site (Ainaya) upload foto langsung ke Cloudinary
+      (unsigned upload preset, murni frontend) -> dapat URL https publik.
+   2) Admin Site panggil PUT /products/{id} dengan {"image_url": "<url>"}.
+   3) Chatbot & Buyer Site tinggal pakai URL-nya.
+ Syarat isi: URL https direct ke file gambar (jpg/png/webp).
+
+ SELESAI JIKA: PUT /products/{id} {"image_url": "https://..."} -> GET
+ /products/{id} memuat URL itu -> chatbot mengirim foto kue di WhatsApp.
+
  CATATAN KECIL (bukan bug):
    - revenue di /reports/summary hanya menghitung payments berstatus
      'Success' — di sandbox, payment baru jadi Success setelah webhook
