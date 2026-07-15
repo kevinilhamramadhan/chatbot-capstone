@@ -155,6 +155,30 @@ async def test_add_to_cart_asks_when_product_ambiguous(monkeypatch):
     assert len(cart) == 1 and cart[0]["product_id"] == 16 and cart[0]["qty"] == 4
 
 
+async def test_product_detail_prefixes_relative_image_path(monkeypatch):
+    """Backend stores /static/... paths; the chatbot must prefix its own
+    BACKEND_BASE_URL so the wwebjs container can actually fetch the image."""
+    from app.backend_client import products as products_api
+    from app.core.config import settings
+    from app.tools.get_product_detail import get_product_detail
+    p12 = {"id": 12, "nama_produk": "Cake 10cm", "harga_jual": 90000,
+           "is_active": True, "image_url": "/static/products/12.jpg"}
+    monkeypatch.setattr(products_api, "list_products",
+                        lambda only_active=True, kategori=None: _async([p12]))
+    ctx = TurnContext(wa_number=WA)
+    set_turn_context(ctx)
+    await get_product_detail.ainvoke({"product": "cake 10cm"})
+    assert len(ctx.media) == 1
+    expected = settings.backend_base_url.rstrip("/") + "/static/products/12.jpg"
+    assert ctx.media[0].image_url == expected
+    # Absolute URLs (e.g. an old Cloudinary entry) pass through untouched.
+    p12["image_url"] = "https://cdn.example.com/12.jpg"
+    ctx2 = TurnContext(wa_number=WA)
+    set_turn_context(ctx2)
+    await get_product_detail.ainvoke({"product": "cake 10cm"})
+    assert ctx2.media[0].image_url == "https://cdn.example.com/12.jpg"
+
+
 async def test_product_detail_asks_when_ambiguous(monkeypatch):
     from app.backend_client import products as products_api
     from app.tools.get_product_detail import get_product_detail

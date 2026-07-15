@@ -3,6 +3,7 @@
 from langchain_core.tools import tool
 
 from app.conversation.context import OutboundMedia, get_turn_context
+from app.core.config import settings
 from app.tools.formatting import options_line, product_label, resolve_product, rupiah
 
 
@@ -30,6 +31,10 @@ async def get_product_detail(product: str) -> str:
     image_url = p.get("image_url")
     caption = f"{name} — {harga}"
     if image_url:
+        if image_url.startswith("/"):
+            # DB stores a relative path (/static/products/12.jpg) so every
+            # consumer prefixes its own reachable backend base URL.
+            image_url = settings.backend_base_url.rstrip("/") + image_url
         get_turn_context().media.append(OutboundMedia(image_url=image_url, caption=caption))
 
     return (

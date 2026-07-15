@@ -29,27 +29,43 @@
          Toggle penuh tinggal dites pakai akun Owner (level 1).
 
 ==============================================================================
- PERMINTAAN BARU KECIL: foto produk bisa diedit dari Admin Site (1 baris!)
+ PERMINTAAN BARU: foto produk di-host BACKEND + bisa diedit dari Admin Site
 ==============================================================================
- Fitur: Admin ganti/isi foto menu -> chatbot otomatis kirim foto itu saat
- pelanggan tanya detail kue (jalur kirim foto di chatbot SUDAH jadi; kolom
- products.image_url juga sudah ada — cuma belum bisa di-update via API).
+ Fitur: Admin upload/ganti foto menu dari Admin Site -> foto tampil di Buyer
+ Site DAN otomatis dikirim chatbot saat pelanggan tanya detail kue. (Jalur
+ kirim foto di chatbot SUDAH jadi & sudah support skema path relatif ini;
+ kolom products.image_url juga sudah ada.)
 
- Yang dikerjakan (benar-benar 1 baris):
-   app/schemas/product.py -> class ProductUpdate, tambah:
-       image_url: Optional[str] = Field(None, max_length=500)
-   (repositories/product_repo.py::update sudah generik exclude_unset,
-    langsung ikut jalan tanpa diubah.)
+ Keputusan tim: foto di-serve backend sendiri (bukan Cloudinary/SaaS).
 
- Alur yang kami rencanakan (biar kamu tidak perlu bikin endpoint upload):
-   1) Admin Site (Ainaya) upload foto langsung ke Cloudinary
-      (unsigned upload preset, murni frontend) -> dapat URL https publik.
-   2) Admin Site panggil PUT /products/{id} dengan {"image_url": "<url>"}.
-   3) Chatbot & Buyer Site tinggal pakai URL-nya.
- Syarat isi: URL https direct ke file gambar (jpg/png/webp).
+ ATURAN PENTING — SIMPAN PATH RELATIF, BUKAN URL ABSOLUT:
+   Kolom image_url diisi HANYA path:  /static/products/12.jpg
+   JANGAN http://localhost:8001/... atau http://backend:8001/... — alamat
+   host itu beda-beda tergantung pemanggil (browser vs container wwebjs vs
+   production). Tiap konsumen mem-prefix base URL-nya sendiri:
+     - chatbot  -> BACKEND_BASE_URL + path   (sudah diimplementasi)
+     - Buyer/Admin Site -> base URL API + path (kabari Ainaya)
 
- SELESAI JIKA: PUT /products/{id} {"image_url": "https://..."} -> GET
- /products/{id} memuat URL itu -> chatbot mengirim foto kue di WhatsApp.
+ Yang dikerjakan:
+   1) Serving statis (1 baris di app/main.py):
+        app.mount("/static", StaticFiles(directory="static"), name="static")
+      (folder static/products/ dibuat sekali; di deployment nanti folder ini
+       di-mount volume + ikut backup.)
+   2) Endpoint upload (aksi Admin/Owner, JWT):
+        POST /products/{product_id}/image     (multipart/form-data, field "file")
+          - Validasi: content-type image/jpeg|png|webp, ukuran <= 5 MB.
+          - Simpan ke static/products/{product_id}.{ext}
+            (nama file = id produk -> ganti foto otomatis menimpa; tambahkan
+             query versi kalau mau cache-bust, mis. ?v=timestamp).
+          - Set products.image_url = "/static/products/{product_id}.{ext}"
+          - Response 200: ProductOut (image_url terisi path relatif).
+   3) (Opsional, 1 baris) image_url: Optional[str] di ProductUpdate — berguna
+      buat menghapus foto (set null) atau koreksi manual.
+
+ SELESAI JIKA: upload foto via POST /products/12/image ->
+   GET  {base}/static/products/12.jpg  tampil di browser, dan
+   GET  /products/12 -> image_url == "/static/products/12.jpg", lalu
+   tanya "cake 10cm kayak gimana?" ke chatbot -> foto masuk di WhatsApp.
 
  CATATAN KECIL (bukan bug):
    - revenue di /reports/summary hanya menghitung payments berstatus
